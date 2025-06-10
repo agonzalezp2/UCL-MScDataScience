@@ -1,0 +1,4 @@
+"0",""
+"0","interaction.plot(DB$milk_level , DB$Material, DB$DT,"
+"0","ylab=""Temperature Reduction (°C)"", xlab=""Milk Level"","
+"0","trace.label=""Material"", cex=0.5, ylim = c(9.7,14.3))"

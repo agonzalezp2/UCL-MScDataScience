@@ -1,0 +1,4 @@
+"0","selectedModel<-5"
+"0","dta_use<-dta_boos[,ModelColnames[[selectedModel]]]#get teh columns that the model uses"
+"2","Error in ModelColnames[[selectedModel]] : subscript out of bounds
+"

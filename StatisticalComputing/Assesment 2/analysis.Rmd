@@ -1,0 +1,309 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+#0. Aim
+Your overall goal is to build a (generalised) linear model and an advanced regression model to predict given the available covariates, and to compare whether one is signicantly UNITS better at predicting the response than the other.
+
+```{r packages include  = FALSE}
+library(ggplot2)
+library(tidyverse)
+library(lubridate)
+```
+
+
+
+
+#1. Preprosesing data
+The response variable here is UNITS, i.e., how many units of that product were sold in a
+particular week at a particular store.
+* Load Data, read.csv with the argument header=TRUE.
+* Set data types:  
+  + The variables PRICE, BASE PRICE and WEEK END DATE are all numeric.
+  + STORE NUM, UPC and MANUFACTURER are all categorical. 
+  + DISPLAY, FEATURE and TPR ONLY are all boolean ( 1 TRUE and 0 otherwise).
+* Prepare data for advaced models
+  + as matrix
+  + dummies for categorical variables (fastDummies packages)
+  
+```{r include  = FALSE}
+dta<-as.tibble(read.csv("data/grocery.csv", header = TRUE))
+dta$DATE<-as.Date(dta$WEEK_END_DATE,origin='1899-12-27')
+dta$DATE<-as.factor(dta$DATE)
+dta$STORE_NUM<-as.factor(dta$STORE_NUM)
+dta$UPC<-as.factor(dta$UPC)
+dta$MANUFACTURER<-as.factor(dta$MANUFACTURER)
+dta$DISPLAY<-as.factor(dta$DISPLAY)
+dta$FEATURE<-as.factor(dta$FEATURE)
+dta$TPR_ONLY<-as.factor(dta$TPR_ONLY)
+dta$UNITS<-as.double(dta$UNITS)
+dta$BASE_PRICE<-as.double(dta$BASE_PRICE)
+dta$PRICE<-as.double(dta$PRICE)
+```
+
+The varibles BASE_PRICE and PRICE, are higly correlateed ($\rho=0.85$). to solve this, it was created the varible DISCOUNT $(PRICE-BASE\_PRICE)/BASE\_PRICE$ ($\rho=-0.25$)
+
+```{r solvingCorrelation include = FALSE}
+cat("PRICE-BASE_price correlation is:", cor(dta$BASE_PRICE,dta$PRICE))
+dta$DISCOUNT<- (dta$PRICE-dta$BASE_PRICE)/dta$BASE_PRICE
+cat("\n","DISCOUNT-BASE_price correlation is:", cor(dta$BASE_PRICE,dta$DISCOUNT))
+```
+
+#2. Data Exploration
+Obtain summary statistics and make useful plots of the data | i.e., that are relevant to the objectives of the study. Such plots might include, but are not necessarily restricted to, pairwise scatter plots for quantitative variables with diferent plotting symbols or colours for each product, or boxplots for categorical variables. Put plots together in a single figure where appropriate and consider the possibility of using log scales for the quantitative variables.
+
+The next table describes and sumarizes the data used in the study.
+
+```{r}
+min(dta$UNITS)
+max(dta$UNITS)
+mean(dta$UNITS)
+
+hist(log(dta$UNITS))
+hist(dta$UNITS)
+
+```
+
+
+```{r treatments}
+dta_treat<-dta%>%
+  group_by(DISPLAY,FEATURE)%>% summarise(count=n())%>%
+  rowid_to_column("Promotion") %>% 
+    left_join(dta, by=c("DISPLAY","FEATURE"))%>%
+  print()
+
+dta_treat$Promotion<-as.factor(dta_treat$Promotion)
+
+dta_treat%>% group_by(UPC, Promotion)%>%
+  summarise(count=n(),sales=sum(UNITS),avg_price=mean(DISCOUNT))%>%
+  print()
+
+
+dta_treat%>% group_by(UPC, MANUFACTURER)%>%
+  summarise(count=n())%>%
+  print()
+
+
+```
+
+```{r include=FALSE}
+df<-dta_treat %>% group_by(Promotion,UPC) %>%
+  summarise(count = n(), sold=sum(UNITS), avg_deltaP = mean(DISCOUNT), avg_basePrice=mean(BASE_PRICE), avg_Price=mean(PRICE), ratio =  sum(sold)/sum(DISCOUNT)) %>% 
+  pivot_longer(c(-UPC,-Promotion), names_to = "key", values_to = "value") %>%
+  #separate(key, into = c("Attribute", "stat"), sep = "_") %>%
+  pivot_wider(names_from = c(Promotion), values_from = value) %>%
+  #spread(Promotion,key) %>%
+  filter(key=="avg_deltaP")%>%
+  #select(-key) %>%  # reorder columns 
+  print()
+```
+The next graph shows a trend of the relationship between  Discount and Units sold
+```{r discount vs Sales  warning=False}
+
+ggplot(data=dta, aes(x=DISCOUNT, y=log(UNITS),group=UPC, colour=UPC)) +
+  geom_smooth(method = lm)+ 
+  ggtitle(" Discount vs Units")#+geom_point() 
+
+```
+
+#Histograms of the Store numbs
+```{r }
+#lets gorup the data of the stores
+dta_store<-dta%>%group_by(STORE_NUM,WEEK_END_DATE)%>%
+  summarise(Total_Week_Sale= sum(UNITS))%>%
+  group_by(STORE_NUM)%>%
+  summarise(Avg_Week_Sale=mean(Total_Week_Sale),
+            Total_Sale=sum(Total_Week_Sale))
+
+#lets create  table of frequencies to analyse it
+bins<-seq((min(dta_store$Avg_Week_Sale)-0.01),max(dta_store$Avg_Week_Sale),length.out=30)# create bins
+frec_table_store <- dta_store %>% mutate(bin = cut(Avg_Week_Sale,bins), right = FALSE) # add bins to frec
+frec_table_store<-group_by(frec_table_store, bin) %>% 
+  summarise(observed = n(), Total_SALE=sum(Total_Sale),per_frec=n()/nrow(dta_store))# group x by bins
+frec_table_store$lower = as.numeric( sub("\\((.+),.*", "\\1", frec_table_store$bin) )# add bins labels
+frec_table_store$upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", frec_table_store$bin))# add bins labels
+
+per_frec_acum<-rep(0,nrow(frec_table_store))
+j=0
+for (i in 1:nrow(frec_table_store)){
+  j=j+frec_table_store$per_frec[i]
+  frec_acum[i]=j
+}
+frec_table_store<-cbind(frec_table_store,frec_acum)
+
+#lets create our groupping table of stores
+cuts<-c(1:9)/10#lets create the following cuts in %
+limits<-rep(0,length(cuts))
+for (i in 1:length(cuts)) {
+  aux<-frec_table_store$frec_acum<cuts[i]
+  limits[i]<-max(frec_table_store$upper[aux])
+}
+limits<-c(0,limits)
+
+STORE_GROUP<-rep(length(limits),nrow(dta_store))
+for (i in 1:nrow(dta_store)) {
+  for (j in length(limits):1) {
+    if (dta_store$Avg_Week_Sale[i]>=limits[j]){
+      STORE_GROUP[i]<-j
+      break
+    }
+  }
+}
+dta_store<-cbind(dta_store,STORE_GROUP)
+dta_store$STORE_GROUP<-as.factor(dta_store$STORE_GROUP)
+dta_store
+
+dta<-dta%>%left_join(dta_store,by="STORE_NUM")
+```
+
+```{r}
+hist1= ggplot(dta_store, aes(x = Avg_Week_Sale)) +
+  geom_histogram(aes(fill=STORE_GROUP),bins=30)+
+  ggtitle("Store Agrupation per average sale per week")+
+  theme(legend.position = "top")
+  #title(main = "Store agrupation per sales distribution")
+  #geom_density(alpha=.2, fill="#FF6666") 
+  #geom_density()
+  #geom_vline(data = Sepal.Length.means, aes(xintercept = x, color = Group.1), linetype="dashed")
+plot(hist1)
+
+```
+
+
+```{r summarytable}
+summary_data<-function(x){
+  if(typeof(x)=="double"){
+    a <- paste("Mean:" , round(mean(x),digits = 2) , 
+               ", Median:" , round(median(x),digits = 2))
+    return(a)
+  }else if (typeof(x)=="integer"){
+    a<-paste("Number of levels: ",nlevels(x))
+    return(a)
+    
+  }else if (typeof(x)=="logical"){
+    a<-paste("Cases: ",round(sum(x),digits = 2))
+  }else{
+    return("varaible type not defined")
+  }
+}
+
+summary(dta)
+
+Variable_name<-c("BASE PRICE", "PRICE", "WEEK END DATE", "STORE NUM", "UPC ", "MANUFACTURER", "DISPLAY", "FEATURE", "TPR ONLY", "UNITS")
+
+Description<-c("regular price of item", "actual amount charged for the product at shelf", "week ending date", "store number", "(Universal Product Code) product specic identier", "manufacturer", "product was a part of in-store promotional display", "product was in in-store leaflet", "temporary price reduction only", "units sold")
+
+Type_Variable<-c(typeof(dta$BASE_PRICE),typeof(dta$PRICE),typeof(dta$DATE),typeof(dta$STORE_NUM),typeof(dta$UPC),typeof(dta$MANUFACTURER),typeof(dta$DISPLAY),typeof(dta$FEATURE),typeof(dta$TPR_ONLY),typeof(dta$UNITS))
+
+data_summary<-c(summary_data(dta$BASE_PRICE),summary_data(dta$PRICE),summary_data(dta$DATE),summary_data(dta$STORE_NUM),summary_data(dta$UPC),summary_data(dta$MANUFACTURER),summary_data(dta$DISPLAY),summary_data(dta$FEATURE),summary_data(dta$TPR_ONLY),summary_data(dta$UNITS))
+
+data.frame(Variable_name,Description,data_summary)
+```
+
+Continuing with our analysis, bellow some importat descriptive plots are shown
+```{r pairs}
+
+pair<-ggpairs(data=dta, columns = c(1:3,5:10),
+              ggplot2::aes(colour=UPC))
+pair
+
+
+```
+we can see
+
+```{r}
+ggplot(data=dta_treat, aes(x=UPC, y=UNITS, group=Promotion)) + geom_line(aes(colour=Promotion))
+
+
+ggplot(data=dta_treat, aes(x=UPC, y=UNITS)) + geom_bar(stat = 'identity', position = "dodge",aes(fill=Promotion))
+
+plot(data=dta_treat, log(UNITS)~log(-DISCOUNT/BASE_PRICE) )
+```
+
+```{r a_brief_story_of_time warning=False}
+dta_week<-dta_treat
+dta_week$week_n<-as.factor(week(dta_week$DATE))
+dta_week$year<-as.factor(year(dta_week$DATE))
+dta_week<-dta_week%>%group_by(week_n,year)%>%summarise(sum_UNITS=sum(UNITS),avg_PRICE=sum(PRICE*UNITS)/sum(UNITS),avg_BASE_PRICE=sum(BASE_PRICE*UNITS)/sum(UNITS), avg_DISCOUNT=sum(DISCOUNT*UNITS)/sum(UNITS), Utility = sum(PRICE*UNITS))
+
+ggplot(data=dta_week, aes(x=week_n, y=(avg_PRICE),group=year, colour=year)) +
+  geom_line()#+
+  #geom_point()
+ggplot(data=dta_week, aes(x=week_n, y=(sum_UNITS),group=year, colour=year)) +
+  geom_line()
+
+ggplot(data=dta_week, aes(x=week_n, y=(Utility),group=year, colour=year)) +
+  geom_line()
+
+ggplot(data=dta_week, aes(x=week_n, y=(sum_UNITS),group=year, colour=year)) +
+  geom_point()+
+  geom_smooth()
+
+```
+
+```{r}
+# plot market relation price Q
+
+ggplot(data=dta_week, aes(x=log(avg_PRICE), y=log(sum_UNITS))) +
+  geom_smooth(method = lm)+
+  geom_point()
+
+ggplot(data=dta_week, aes(x=(avg_PRICE), y=(sum_UNITS))) +
+  geom_smooth(method = lm)+
+  geom_point()
+
+ggplot(data=dta_week, aes(x=(avg_DISCOUNT), y=log(sum_UNITS))) +
+  geom_smooth(method = lm)+
+  geom_point()
+
+ggplot(data=dta_week, aes(x=(avg_DISCOUNT), y=(sum_UNITS))) +
+  geom_smooth(method = lm)+
+  geom_point()
+
+```
+```{r}
+dta_Manu<-dta_treat%>%group_by(DATE,MANUFACTURER)%>%summarise(sum_UNITS=sum(UNITS),avg_PRICE=sum(PRICE*UNITS)/sum(UNITS),avg_BASE_PRICE=sum(BASE_PRICE*UNITS)/sum(UNITS), avg_DISCOUNT=sum(DISCOUNT*UNITS)/sum(UNITS), Utility = sum(PRICE*UNITS))
+
+ggplot(data=dta_Manu, aes(x=(-avg_DISCOUNT), y=(sum_UNITS),group=MANUFACTURER, colour=MANUFACTURER)) +
+  geom_smooth(method = lm)+
+  geom_point()
+
+ggplot(data=dta_Manu, aes(x=(-avg_DISCOUNT), y=log(sum_UNITS),group=MANUFACTURER, colour=MANUFACTURER)) +
+  geom_smooth(method = lm)+
+  geom_point()
+
+```
+
+```{r}
+ggplot(data=dta, aes(x=UPC, y=UNITS)) + geom_boxplot(aes(colour=MANUFACTURER))
+ggplot(data=dta, aes(x=UPC, y=PRICE)) + geom_boxplot(aes(colour=MANUFACTURER))
+ggplot(data=dta, aes(x=UPC, y=PRICE*UNITS)) + geom_boxplot(aes(colour=MANUFACTURER))
+
+#dta_treat%>%group_by(MANUFACTURER,DATE)%>%
+#  summarise(Disp=sum(DISPLAY*1),Feat=sum(FEATURE*1),Disc=sum(TPR_ONLY*1))%>%
+#  pivot_longer(c(-DATE,-MANUFACTURER), names_to = "key", values_to = "value")%>%
+#  pivot_wider(names_from =c(MANUFACTURER,key) ,values_from=value)%>%
+#  print()
+
+```
+
+#3. Generalized Linear Model
+Find a linear model or generalised linear model (i.e., one using lm() or glm(), refer to Lab 6) that enables UNITS to be predicted from the other variables and that is not more complicated than necessary. You may wish to consider using log transformations of one or more of the explanatory variables or of the response variable and to consider interactions between variables. You should consider a wide enough range of models to make your choice of model convincing and use appropriate diagnostics to assess them. But ultimately you are required to recommend a single lm() or glm() model that is suitable for use (in the grocery retail industry, for example) and to justify your recommendation.
+
+#3.1. Previous defintions
+As the values of the ouptut varaible can be considered as Poissson as it belongs to the positive Integers. therefore  we will consieder only GLM in the poisson and quasipoisson Family. The link function that were tested are:
+1. log
+```{r}
+fit.glm1<-glm(formula= UNITS~ DISCOUNT*Promotion+BASE_PRICE+MANUFACTURER+TPR_ONLY, family = poisson(link = "log"), data = dta_treat)
+summary(fit.glm1)
+```
+
+
+#4. Advanced Regression Models
+Find an advanced regression model (for example, using gradient boosting or random forests, see Lab 7) to predict UNITS using the available covariates. As above, you are encouraged to consider a variety of models, but ultimately you are required to recommend a single model from this family.
+
+#5. Cross Validation
+Perform 10-fold cross validation to compute the cross-validated Root Mean Square Error (RMSE) of each of your two models in parts 3 and 4. For each of your folds, compute the RMSE of your models from parts 3 and 4, so that you obtain 10 pairs of RMSE values. Perform a paired t-test to assess whether one of your two models is significantly better than the other in terms of predictive power.
+
+#6. Final Model
+* 

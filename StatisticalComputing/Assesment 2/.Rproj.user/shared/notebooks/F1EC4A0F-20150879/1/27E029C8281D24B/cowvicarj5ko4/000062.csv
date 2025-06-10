@@ -1,0 +1,13 @@
+"0","dta_treat$Treat<-as.factor(dta_treat$Treat)"
+"0",""
+"0","df<-dta_treat %>% group_by(Treat,UPC) %>%"
+"0","  summarise(count = n(), sold=sum(UNITS), avg_deltaP = mean(Delta_price), avg_basePrice=mean(BASE_PRICE), avg_Price=mean(PRICE), ratio =  sum(sold)/sum(Delta_price)) %>% "
+"0","  pivot_longer(c(-UPC,-Treat), names_to = ""key"", values_to = ""value"") %>%"
+"0","  #separate(key, into = c(""Attribute"", ""stat""), sep = ""_"") %>%"
+"0","  pivot_wider(names_from = c(Treat), values_from = value) %>%"
+"0","  #spread(Treat,key) %>%"
+"0","  filter(key==""avg_deltaP"")%>%"
+"0","  #select(-key) %>%  # reorder columns "
+"0","  print()"
+"2","`summarise()` regrouping output by 'Treat' (override with `.groups` argument)
+"

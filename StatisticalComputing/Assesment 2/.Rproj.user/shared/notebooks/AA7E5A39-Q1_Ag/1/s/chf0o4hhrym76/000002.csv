@@ -1,0 +1,8 @@
+"0","# drop outlayers"
+"0","# assuming normality. we take out the outlayers considering 2sd form the mean"
+"0",""
+"0","# outlayers<- (data$kind==""red"" & (data$pH>(df$sd_red[9] +2*df$sd_red[9]) | data$pH<(df$mean_red[9]-2*df$sd_red[9])))| (data$kind==""white"" & (data$pH>(df$mean_white[9] +2*df$sd_white[9]) | data$pH<(df$mean_white[9]-2*df$sd_white[9])))"
+"0","# "
+"0","# cat(sum(outlayers), ""samples erased for been outlayers"",""\n"")"
+"0","# data<-data[!outlayers,]"
+"0",""

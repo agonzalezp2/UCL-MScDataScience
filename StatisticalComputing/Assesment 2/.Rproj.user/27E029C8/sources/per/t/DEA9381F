@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1614597987814.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "3818545296",
+    "id" : "DEA9381F",
+    "lastKnownWriteTime" : 1614079261,
+    "last_content_update" : 1614079261,
+    "path" : "C:/Users/agust/University College London/Sivakumar, Sriram - Statistical design of investigations/ICA1-Inv-Model/Analysis.Rmd",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "460,6",
+        "scrollLine" : "0"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 7,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

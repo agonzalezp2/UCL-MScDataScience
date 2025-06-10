@@ -1,0 +1,7 @@
+"0","dta_treat<-dta%>%select(DISPLAY,FEATURE,TPR_ONLY)%>%"
+"0","  group_by(DISPLAY,FEATURE,TPR_ONLY)%>% summarise(count=n())%>%"
+"0","  rowid_to_column(""Treat"") %>% "
+"0","    left_join(dta, by=c(""DISPLAY"",""FEATURE"",""TPR_ONLY""))%>%"
+"0","  print()"
+"2","`summarise()` regrouping output by 'DISPLAY', 'FEATURE' (override with `.groups` argument)
+"

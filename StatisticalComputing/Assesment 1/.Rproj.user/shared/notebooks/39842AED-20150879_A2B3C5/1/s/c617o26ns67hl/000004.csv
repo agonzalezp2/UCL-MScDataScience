@@ -1,0 +1,7 @@
+"0",""
+"0","# c. plot the qqline. "
+"0","#This function will create the appropriate reference line for our data and"
+"0","#the Weibull distribution given as first and second parameter respectively."
+"0","qqline(t_fail, distribution = function(p) "
+"0","  qweibull(p, shape = wshape, scale = wscale), col = 2)"
+"0",""

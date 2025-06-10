@@ -1,0 +1,195 @@
+---
+title: '20105412'
+author: "A3, B1, C5"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+# PLEASE LEAVE THIS IS AS
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# Section A, Question 3, Student ID: 20105412
+```{r}
+#Assign percentiles
+percentiles <- c(0.9, 0.95, 0.975, 0.99, 0.995)
+
+#Assign degrees of freedom
+dfreedom <- c(1:10)
+
+#Create an empty matrix with rows = length(dfreedom), cols = length(percentiles) and embed it into a dataframe
+res = as.data.frame(matrix(nrow = length(dfreedom), ncol = length(percentiles)))
+
+#assign column and row names
+colnames(res) <- paste("Percent = ",percentiles,sep="")
+rownames(res) <- paste("df =", dfreedom, sep = "")
+
+#Fill matrix with the corresponding quantiles, using a nested for loop 
+for (i in 1:length(dfreedom)) {
+  for(j in 1:length(percentiles)) {
+      res[i,j] = qt(p = percentiles[j], df = dfreedom[i])}
+}
+
+#Create table and format it using "knitr:kable". Display up to 3 digits
+res %>%
+  knitr::kable(digits = 3)
+```
+
+# B1, 20105412
+```{r}
+#1. Read the data into R using scan("psych.dat")
+psych_data <- scan("psych.dat")
+
+#2 Output the number of observations in the dataset, and print out a table showing the frequency distribution of the data.
+
+#Output the number of observations
+length(psych_data)
+
+#create a workable frequency table, using as.data.frame
+table_psy <- as.data.frame(table(psych_data))
+#reconvert first column into integers
+table_psy$psych_data <- strtoi(table_psy$psych_data)
+
+#3 Create a histogram of the data.
+hist(breaks = c(2.5:16.5),x = psych_data)
+#alternatively barplot(height = table_psy$Freq, names.arg = table_psy$psych_data)
+
+#4 Use the sample mean and the sample variance to obtain expected frequencies for the tabulated data, under the assumption that the observations are drawn from an underlying normal distribution with this mean and variance. Output the expected frequencies.
+
+#Step one - calculate mean, std deviation
+muhat <- mean(psych_data)
+sdev <- sd(psych_data)
+
+#Step two - initialise empty vector, then fill it with probabilities corresponding to the observed frequencies as if they were drawn from the normal distribution with mean and sd respectively equal to "muhat" and "sdev"
+dens_norm <- rep(0,nrow(table_psy))
+
+for(i in 1:length(table_psy$psych_data)) {
+  if(i == 1) {
+    dens_norm[i] = pnorm(q = table_psy$psych_data[i],mean = muhat, sd = sdev)}
+  else if(i == length(table_psy$psych_data)) {
+    dens_norm[i] = 1 - pnorm(q = table_psy$psych_data[i - 1],mean = muhat, sd = sdev)}
+  else {
+    dens_norm[i] =
+    pnorm(q = table_psy$psych_data[i],mean = muhat, sd = sdev) - 
+    pnorm(q = table_psy$psych_data[i-1],mean = muhat, sd = sdev)}
+}
+
+for(i in 1:length(table_psy$psych_data)) {
+  if(i == 1) {dens_norm[i] = pnorm(q = table_psy$psych_data[i],mean = muhat, sd = sdev)}
+}
+
+
+(1 - pnorm(q = table_psy$psych_data[i - 1],mean = muhat, sd = sdev))/2
+#Step three - Create expected frequencies vector, calculated as total observations X cumulative density of the Normal distribution at the respective quantile.
+#note that the observed frequencies are described by table_psy$Freq
+expected <- sum(table_psy$Freq) * dens_norm
+
+#Step four - Finally bind the new columns "dens_norm" and "expected" (frequencies) to the table
+table_psy = cbind(table_psy,dens_norm = round(dens_norm,3),expected = round(expected,3)) 
+
+#5  Make a hi-density plot of the contributions to the chi-squared goodness-of-fit statistic (defined as the squared residuals divided by the expected frequencies, where the residuals are the observed frequencies minus the expected frequencies).
+
+#Step one - Calculate Chi-square components: (Observed - expected frequencies)^2 / expected frequencies
+Chi_elements <- (table_psy$Freq - table_psy$expected)^2/table_psy$expected
+#add residuals to the table
+table_psy = cbind(table_psy,Chi_elements = round(Chi_elements,3))
+print(table_psy)
+
+#Step two - Degrees of freedom equal to the number of levels associated with the independent variable (208 in this case) MINUS number of parameters estimated (mean and sd, i.e. 2)
+DF <- length(table_psy$psych_data) - 2
+
+#Step three - Hi-density plot: Chi square elements vs Chisquare density distribution
+plot(x = Chi_elements,type = "h")
+
+#EXTRA - calculate X2-test / print out the pvalue results
+X2 <- sum(Chi_elements)
+pval <- pchisq(X2,df=DF,lower.tail=FALSE)  
+
+#print output of p-value
+txtlabs <- c("Test statistic:","P value:")     # Labels for output
+test.res <- data.frame(Value=c(X2,pval),row.names=txtlabs)
+print(test.res)
+```
+
+# C5, 20105412
+
+``` {r}
+#import data
+x <- read.table("spe.dat",header = TRUE)
+summary(x)
+
+#Plot EXPEND vs ECAB
+plot(x = x$EXPEND, y = x$ECAB)
+
+#Question 1: Find correlation coefficient between Expend and ECAB
+
+#Find means of two selected variables
+mu_expend <- mean(x$EXPEND)
+mu_ecab <- mean(x$ECAB)
+obs <- nrow(x)
+DF = obs - 2
+
+#calculate Pearson correlation coefficient and related test statistic
+rp_numerator <- sum((x$EXPEND - mu_expend)*(x$ECAB - mu_ecab))
+rp_denominator <- sqrt(sum((x$EXPEND - mu_expend)^2)*sum((x$ECAB - mu_ecab)^2))
+r_pearson <- rp_numerator/rp_denominator
+
+#calculate the test statistics using Pearson correlation coefficient
+t_pearson <- (r_pearson*sqrt(DF))/sqrt(1-r_pearson^2)
+
+###Calculate Spearman correlation coefficient and related test statistic
+### Spearman corr coefficient = 1 - 6SUM(d^2)/(n^3 - n) 
+
+#calculate rank for two vectors
+rank_exp <- rank(x$EXPEND)
+rank_eca <- rank(x$ECAB)
+
+# Sum (d^2) component
+diff_rank_tot <- sum((rank_exp - rank_eca)^2)
+
+#Finally calculate Spearman correlation coefficient and Spearman test statistic
+r_spearman <- 1 - 6*diff_rank_tot/(obs^3 - obs)
+t_spearman <- (r_spearman*sqrt(DF))/sqrt(1-r_spearman^2)
+
+#Show outputs
+cat("Pearson correlation and test statistic are respectively ", round(r_pearson,3)," and ", round(t_pearson,3))
+cat("Spearman correlation and test statistic are respectively ", round(r_spearman,3)," and ", round(t_spearman,3))
+
+##Question 2 
+
+#"Exact" p-value for r_pearson, knowing that "t_pearson" has a Student T distribution with n-2 degree of freedom.
+# Null hypotheses: rho = 0
+pvalue_pearson <- pt(q = -t_pearson,df = DF, lower.tail = TRUE) + pt(q = t_pearson, df = DF, lower.tail = FALSE)
+
+#Approximate p-value fir r_spearman, knowing that "t_spearman" has a Student T distribution with n-2 degree of freedom.
+#Null hypotheses: rho = 0
+pvalue_spearman <- pt(q = -t_spearman,df = DF, lower.tail = TRUE) + pt(q = t_spearman, df = DF, lower.tail = FALSE)
+
+#Z transform p-value
+rz_trans_test <- 0.5*log((1+r_pearson)/(1-r_pearson)) #transformed correlation test statistic
+
+#For sufficiently large n, rz_trans_test is normally distributed, with mean and variance as calculated below.
+#Note that the correlation coefficient of the population based on the Null Hypotheses is ZERO
+mu_z_pop <- 0.5*log((1+0)/(1-0))
+var_z_pop <- 1/(obs - 3)
+
+#calculate p-value
+pvalue_fish <- pnorm(q = -rz_trans_test, mean = mu_z_pop, sd = sqrt(var_z_pop),lower.tail = TRUE) + pnorm(q = rz_trans_test, mean = mu_z_pop, sd = sqrt(var_z_pop),lower.tail = FALSE)
+
+#Show outputs
+cat("p-value of t_pearson =", pvalue_pearson)
+cat("p-value of t_spearman =", pvalue_spearman)
+cat("p-value of t_fish =", pvalue_fish)
+
+#Question 3: An approximate 95% confidence interval for ρ, constructed using the Z transform above
+CI_lower_bound <- rz_trans_test + qnorm(0.025)* sqrt(var_z_pop)
+CI_upper_bound <- rz_trans_test + qnorm(1-0.025)*sqrt(var_z_pop) + mu_z_pop
+
+conf_int <- c(CI_lower_bound, CI_upper_bound)
+print(conf_int)
+```

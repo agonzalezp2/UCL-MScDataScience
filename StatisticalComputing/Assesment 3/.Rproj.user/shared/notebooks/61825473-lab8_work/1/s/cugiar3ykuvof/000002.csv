@@ -1,0 +1,2 @@
+"0","dat_pca <- prcomp(dta_clus%>%select(PupilAbs, VOffenceRate, ElderlyFallRate, FuelPoverty, WinterDeaths, SOffenceRate, Under18Pcnt, Over64Pcnt, EconInactRate, Pollution, HomeAfford,GenderPayGap, Earnings), scale.=TRUE)
+print(dat_pca, digits = 2)"

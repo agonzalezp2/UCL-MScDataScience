@@ -1,0 +1,5 @@
+"0",""
+"0","grid3<-grid.arrange(qq_plot[[1]]+xlab("""")+theme(legend.position = ""none""),"
+"0","                    qq_plot[[3]]+xlab("""")+theme(legend.position = ""none""),"
+"0","                    qq_plot[[2]]+theme(legend.position = ""none""),"
+"0","                    ncol=1)"

@@ -1,0 +1,3 @@
+"0",""
+"0","# plot the qqline. This function will create the appropriate reference line for our data against the normal distribution."
+"0","qqline(t_fail, col = 2)"

@@ -1,0 +1,6 @@
+"0","dta_GLM<-dta"
+"0","dta_GLM$logUnits<-log(dta$UNITS)"
+"0","dta_GLM<-dta_GLM[c(-5724,-9346,-5004,-2981,-8276,-6687,-82730,-5553,-2483,-2983,-8271,-2633,-9414,-8618,-2632),]"
+"0","Deviance<-NULL"
+"0","AICs<-NULL"
+"0","Model_Name<-NULL"

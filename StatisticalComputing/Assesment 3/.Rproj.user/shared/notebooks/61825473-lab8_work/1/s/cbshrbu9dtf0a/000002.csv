@@ -1,0 +1,4 @@
+"0","hcl1 <- cutree(hcl, k = 20)
+hcl2 <- cutree(hcl, h = 3.9)
+
+dta_clus<-left_join(dta,tibble(clus_dta[,1],hcl1)) # add cluster name!"

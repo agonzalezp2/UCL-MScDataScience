@@ -1,0 +1,8 @@
+"0","df.total<-data %>% #group_by(kind) %>%"
+"0","  select(fixed.acidity, volatile.acidity, citric.acid, residual.sugar, chlorides, free.sulfur.dioxide, total.sulfur.dioxide, density, pH, sulphates, alcohol, quality) %>% "
+"0","  summarise_each(funs(min = min, max = max, mean = mean,sd = sd)) %>% "
+"0","  pivot_longer(everything(), names_to = ""key"", values_to = ""value"") %>%"
+"0","  separate(key, into = c(""Attribute"", ""stat""), sep = ""_"") %>%"
+"0","  pivot_wider(names_from = c(stat), values_from = value) %>%"
+"0","  select(Attribute, min, max, mean, sd) %>%  # reorder columns "
+"0","  print()"

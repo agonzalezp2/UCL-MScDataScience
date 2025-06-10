@@ -1,0 +1,7 @@
+"0",""
+"0","dta<-dta%>%left_join(dta_store,by=""STORE_NUM"")%>% dplyr::select(BASE_PRICE, PRICE, WEEK_END_DATE, STORE_NUM, UPC, MANUFACTURER, DISPLAY, FEATURE, TPR_ONLY, UNITS, DISCOUNT, STORE_GROUP) "
+"0",""
+"0","hist1<-ggplot(dta_store, aes(x = Avg_Week_Sale)) +"
+"0","  geom_histogram(aes(fill=STORE_GROUP),bins=30)+"
+"0","  ggtitle(""Store agrupation per week sale"")+"
+"0","  theme(legend.position = ""top"")"

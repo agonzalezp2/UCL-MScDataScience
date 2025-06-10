@@ -1,0 +1,483 @@
+---
+title: "Wine Study"
+author: "ag"
+date: "18/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+```{r, load}
+# load  Libraries
+library(ggplot2)
+library(tidyverse)
+library(gridExtra)
+library(GGally)
+
+# load Data
+load("../data.RData")
+data<-as_tibble(data)
+```
+
+
+# 1. Study fo the distribution of pH values for wines
+Questions we seek to answer
+* whole data set / low quality / high Quality
+* Is the pH dsitibutin Normal?? use two set of hipotesis test
+
+#1.1 descrption of the data set
+```{r}
+Q1_theme <- theme(
+ plot.title=element_text(face="bold.italic", size="18", color="brown"),
+ axis.title=element_text(face="bold.italic",size=12, color="brown"),axis.text=element_text(face="bold", size=11,color="black"),
+ panel.background=element_rect(fill="white",color="grey",size=4),panel.grid.major.y=element_line(color="grey",linetype=1),
+ panel.grid.minor.y=element_line(color="grey",linetype=2),
+ panel.grid.minor.x=element_blank(),legend.position="top") 
+
+```
+
+```{r}
+#summary(data)
+df<-data %>% group_by(kind) %>%
+  select(fixed.acidity, volatile.acidity, citric.acid, residual.sugar, chlorides, free.sulfur.dioxide, total.sulfur.dioxide, density, pH, sulphates, alcohol, quality) %>% 
+  summarise_each(funs(min = min, max = max, mean = mean,sd = sd)) %>% 
+  pivot_longer(-kind, names_to = "key", values_to = "value") %>%
+  separate(key, into = c("Attribute", "stat"), sep = "_") %>%
+  pivot_wider(names_from = c(stat, kind), values_from = value) %>%
+  #spread(stat, value) %>%
+  #select(Attribute, min, max, mean, sd) %>%  # reorder columns 
+  print()
+
+df.total<-data %>% #group_by(kind) %>%
+  select(fixed.acidity, volatile.acidity, citric.acid, residual.sugar, chlorides, free.sulfur.dioxide, total.sulfur.dioxide, density, pH, sulphates, alcohol, quality) %>% 
+  summarise_each(funs(min = min, max = max, mean = mean,sd = sd)) %>% 
+  pivot_longer(everything(), names_to = "key", values_to = "value") %>%
+  separate(key, into = c("Attribute", "stat"), sep = "_") %>%
+  pivot_wider(names_from = c(stat), values_from = value) %>%
+  select(Attribute, min, max, mean, sd) %>%  # reorder columns 
+  print()
+
+```
+```{r}
+# drop outlayers
+# assuming normality. we take out the outlayers considering 2sd form the mean
+
+# outlayers<- (data$kind=="red" & (data$pH>(df$sd_red[9] +2*df$sd_red[9]) | data$pH<(df$mean_red[9]-2*df$sd_red[9])))| (data$kind=="white" & (data$pH>(df$mean_white[9] +2*df$sd_white[9]) | data$pH<(df$mean_white[9]-2*df$sd_white[9])))
+# 
+# cat(sum(outlayers), "samples erased for been outlayers","\n")
+# data<-data[!outlayers,]
+
+```
+
+```{r}
+
+pair<-ggpairs(data=data, columns = c(1:7,10,11,9),
+              ggplot2::aes(colour=kind))
+pair
+```
+
+# Plot an Intuition 
+```{r DensityPlots}
+p<-list()
+bound <- c(min(data$pH), max(data$pH))
+
+for (j in 1:3) {
+  plot_wine=""
+  if (j ==1) { aux <-filter(data, kind %in% c("red", "white"))
+    plot_wine = "all wines"
+  } else if(j==2) { aux<-filter(data, kind %in% c("red")) 
+    plot_wine = "red wines"
+  } else { aux<-filter(data, kind %in% c("white")) 
+    plot_wine = "white wines"
+  }
+  
+  for (i in 1:3){
+    if (i ==1) { 
+      aux2<-filter(aux, quality_sep %in% c("low","medium","high"))
+      plot_name = paste (plot_wine, "all quality")
+    } else if(i==2) { aux2<-filter(aux, quality_sep %in% c("low"))
+      plot_name = paste (plot_wine, "low quality")
+    } else { 
+      aux2<-filter(aux, quality_sep %in% c("high")) 
+     plot_name = paste (plot_wine, "high quality")
+    }
+    
+    index = 3*(j-1)+i
+    
+    p[[index]]<- ggplot(aux2, aes(x = pH)) +
+      geom_histogram(aes(y=..density..), position="identity", colour = "black",
+                     fill = "white",bins= 25, size = 0.1, alpha=0.5) + 
+      geom_density(alpha=0.6) + 
+      stat_function(fun = dnorm, args = list(mean = mean(aux$pH), sd = sd(aux$pH)), color = "darkred", size = 1 ) + 
+      labs(title = plot_name,x="",y="") + theme(plot.title = element_text(size=9)) + xlim(bound[1],bound[2])
+      
+  }
+}
+
+# plot in grif
+
+grid.arrange(p[[1]],p[[2]],p[[3]],p[[4]],p[[5]],p[[6]],p[[7]],p[[8]],p[[9]], ncol = 3, top = "pH Density distibution")
+```
+
+## Density plot 2
+```{r}
+for (j in 1:3) {
+  plot_wine=""
+  if (j ==1) { aux <-filter(data, kind %in% c("red", "white"))
+    plot_wine = "all wines"
+  } else if(j==2) { aux<-filter(data, kind %in% c("red")) 
+    plot_wine = "red wines"
+  } else { aux<-filter(data, kind %in% c("white")) 
+    plot_wine = "white wines"
+  }
+  mydensity <- ggplot(aux, aes(pH))
+  mydensity = mydensity + geom_density(aes(fill = quality_sep), alpha=0.6) +
+  labs(title= paste("Density pH for",plot_wine),
+  x="# pH",  fill="Quality")
+  plot(mydensity)
+}
+```
+
+
+## Plot pH
+```{r}
+
+myhistogram <-list()
+qq_plot <-list()
+# modificate data
+aux<-filter(data, kind %in% c("red", "white"))
+plot_wine =""
+for (i in 1:3){ #filter of quality 
+  if (i ==1) { 
+    aux2<-filter(aux, quality_sep %in% c("low","medium","high"))
+    plot_name = paste (plot_wine, "All Wines Data ")
+  } else if(i==2) { 
+    aux2<-filter(aux, quality_sep %in% c("low"))
+    plot_name = paste (plot_wine, "Low Quality Wines")
+  } else { 
+    aux2<-filter(aux, quality_sep %in% c("high")) 
+    plot_name = paste (plot_wine, "High Quality Wines")
+  }
+  
+  # Change histogram plot fill colors by groups
+  data.info<- aux2 %>% group_by(kind) %>%
+    select(pH) %>%
+    summarise_each(funs( n = n(), mean = mean,sd = sd))
+  
+  myhistogram[[i]] <- ggplot(aux2, aes(x = pH, fill = kind, color = kind)) +
+    geom_histogram(position="identity",alpha = 0.2, bins= 25) +
+    geom_vline(data = data.info, aes(xintercept = mean, color = kind), linetype="dashed") + 
+    labs(title= plot_name) + xlim(min(data$pH),max(data$pH)) +
+    Q1_theme
+  
+  ## qqplot
+  
+  qq_plot[[i]] <-ggplot(aux2, aes(sample=pH, fill=kind, color = kind)) + stat_qq() +
+    stat_qq_line() + xlab("theorical normal") + ylab(plot_name) + Q1_theme
+}
+
+grid1<-grid.arrange(myhistogram[[1]]+theme(legend.position = "none"),
+                    myhistogram[[3]]+ylab("")+theme(legend.position = "none"),
+                    myhistogram[[2]]+ylab("")+theme(legend.position = "right"),
+                    qq_plot[[1]],
+                    qq_plot[[3]]+ylab(""),
+                    qq_plot[[2]]+ylab(""),
+                    ncol=3)
+
+grid2<-grid.arrange(myhistogram[[1]]+theme(legend.position = "none"),
+                    myhistogram[[3]]+ylab("")+theme(legend.position = "none"),
+                    myhistogram[[2]]+ylab("")+theme(legend.position = "none"),
+                    ncol=3)
+
+grid3<-grid.arrange(qq_plot[[1]]+xlab("")+theme(legend.position = "none"),
+                    qq_plot[[3]]+xlab("")+theme(legend.position = "none"),
+                    qq_plot[[2]]+theme(legend.position = "none"),
+                    ncol=1)
+
+
+
+```
+```{r}
+df<-data %>% group_by(kind,quality_sep) %>%
+  select(pH) %>% 
+  summarise_each(funs(n = n(), mean = mean,sd = sd)) %>% 
+  pivot_longer(-c(kind,quality_sep), names_to = "key", values_to = "value") %>%
+  filter(quality_sep %in% c("low","high")) %>%
+  #separate(key, into = c("Attribute", "stat"), sep = "_") %>%
+  pivot_wider(names_from = c(key, quality_sep), values_from = value) %>%
+  #spread(key, value) %>%
+  #select(Attribute, min, max, mean, sd) %>%  # reorder columns 
+  print()
+```
+# Q-Q plot
+```{r}
+q<-list()
+par(mfrow=c(3,3))
+
+# all data
+aux<-filter(data, kind %in% c("red", "white"))
+qqnorm(aux$pH, main = "All data Normal Q-Q Plot", ylab="", xlab="")
+qqline(aux$pH, col = 2)
+
+aux2<-filter(aux, quality_sep %in% c("high"))
+qqnorm(aux2$pH, main = "High quality all wines", ylab="", xlab="")
+qqline(aux2$pH, col = 2)
+
+aux2<-filter(aux, quality_sep %in% c( "low"))
+qqnorm(aux2$pH, main = "Low quality all wines", ylab="", xlab="")
+qqline(aux2$pH, col = 2)
+
+# red wines
+aux<-filter(data, kind %in% c("red"))
+qqnorm(aux$pH, main = "Red wine Normal Q-Q Plot", ylab= "", xlab="")
+qqline(aux$pH, col = 2)
+
+aux2<-filter(aux, quality_sep %in% c("high"))
+qqnorm(aux2$pH, main = "High quality red wines", ylab="", xlab="")
+qqline(aux2$pH, col = 2)
+
+aux2<-filter(aux, quality_sep %in% c( "low"))
+qqnorm(aux2$pH, main = "Low quality red wines", ylab="", xlab="")
+qqline(aux2$pH, col = 2)
+
+#white wines
+aux<-filter(data, kind %in% c("white"))
+qqnorm(aux$pH, main = "White wine Normal Q-Q Plot", ylab="", xlab="")
+qqline(aux$pH, col = 2)
+
+aux2<-filter(aux, quality_sep %in% c("high"))
+qqnorm(aux2$pH, main = "High quality White wines", ylab="", xlab="")
+qqline(aux2$pH, col = 2)
+
+aux2<-filter(aux, quality_sep %in% c( "low"))
+qqnorm(aux2$pH, main = "Low quality White wines", ylab="", xlab="")
+qqline(aux2$pH, col = 2)
+
+```
+```{r}
+
+p[[3]]
+
+aux2<-filter(aux, quality_sep %in% c("high"))
+qqnorm(aux2$pH, main = "High quality all wines")
+qqline(aux2$pH, col = 2)
+
+```
+## Normality test - Goodness of fit test
+
+* pearson Chi-square test (for data grouped as bins)
+
+* Test for symmetry
++ Coefficent fo sekwness $H_0: b_1=0 , H_1: b_1 \neq 0$ where $b_1=\dfrac{\dfrac{1}{n} \sum_{i=1}^n (X_i-\bar X)^3 }{S^3}$
++ Coefficient of kurtosis $H_0: b_2=0 , H_1: b_2 \neq 0$ where $b_2=\dfrac{\dfrac{1}{n} \sum_{i=1}^n (X_i-\bar X)^4 }{S^4}$
+
+* Others
++ Kolmogorov-Smirnov (K-S) normality test 
++ Shapiro-Wilk’s test. normality test 
+
+```{r test_norm_chi2 function }
+test_norm_chi2 <- function(x, bins){
+  x<-as_tibble(x)
+  
+  mu_hat=mean(x$value)#norm parameters
+  sd_hat=sd(x$value)#sd parameters
+  n<-length(x$value)#sample size
+  
+  #bins 
+  bins<-seq((min(x$value)-0.01),max(x$value),length.out=bins)# create bins
+  x<-x %>% mutate(bin = cut(value,bins), right = FALSE) # add bins to x
+  x<-group_by(x, bin) %>% summarise(observed = n())# group x by bins 
+  x$lower = as.numeric( sub("\\((.+),.*", "\\1", x$bin) )# add bins labels
+  x$upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", x$bin))# add bins labels
+  # add expected values for a norm distribution
+  x$expected = (pnorm(x$upper,mean = mu_hat, sd=sd_hat)-
+                  pnorm(x$lower,mean = mu_hat, sd=sd_hat))*n
+  x$expected[1] = 
+    (pnorm(x$upper[1],mean = mu_hat, sd=sd_hat))*n # limit to -inf
+  x$expected[nrow(x)] = (1-pnorm(x$lower[nrow(x)],mean = mu,
+                                 sd=sd_hat))*n # limit to +inf
+  
+  #create statistic
+  x$x2 = (x$observed-x$expected)^2/(x$expected) # chi2 per section
+  chi_stat = sum(x$x2) # statistic chi2
+  df_chi=nrow(x)-2-1  # Degrees of freedom 2 parameters
+  p_val <- pchisq(chi_stat,df=df_chi,lower.tail=FALSE) # p value
+  
+  return(list(chi_stat,p_val,x))
+}
+
+```
+
+```{r Chi-square bins loop}
+
+chi_test<-tibble(data_filter=character(),statistic =numeric() , p_value = numeric())
+
+for (j in 1:3) { #data of wine type
+  plot_wine=""
+  if (j ==1) { aux <-filter(data, kind %in% c("red", "white"))
+    plot_wine = "all wines"
+  } else if(j==2) { aux<-filter(data, kind %in% c("red")) 
+    plot_wine = "red wines"
+  } else { aux<-filter(data, kind %in% c("white")) 
+    plot_wine = "white wines"
+  }
+  
+  for (i in 1:3){ #filter of quality 
+    if (i ==1) { 
+      aux2<-filter(aux, quality_sep %in% c("low","medium","high"))
+      plot_name = paste (plot_wine, "all quality")
+    } else if(i==2) { aux2<-filter(aux, quality_sep %in% c("low"))
+      plot_name = paste (plot_wine, "low quality")
+    } else { 
+      aux2<-filter(aux, quality_sep %in% c("high")) 
+      plot_name = paste (plot_wine, "high quality")
+    }
+    
+    a <- test_norm_chi2(aux2$pH, bins = 25) # calculate test
+    chi_test<-chi_test %>% add_row(tibble_row( #add row
+      data_filter=plot_name,statistic = a[[1]] , p_value = a[[2]]))
+  }
+}
+
+chi_test
+```
+
+The statics that allows us tu test normality from the Skewness and Kurtosis are:
+SeeMore [https://towardsdatascience.com/testing-for-normality-using-skewness-and-kurtosis-afd61be860] 
+* The Ombnibus K-squared test:  $K=Z_1(b_1)^2+Z_2(b_2)^2, K \sim\chi^2(2)$ Where $b_1=\dfrac{\dfrac{1}{n} \sum_{i=1}^n (X_i-\bar X)^3 }{S^3}$
+$b_2=\dfrac{\dfrac{1}{n} \sum_{i=1}^n (X_i-\bar X)^4 }{S^4}$
+
+* The Jarque-Bera test: $JB=\dfrac n 6 (b_1^2+\dfrac 1 4 b_2^2), JB \sim\chi^2(2)$
+
+```{r Function Jarque-Bera_test}
+
+jb_test<-function(dis){
+
+  mu_hat<-mean(dis)
+  sd_hat<-sd(dis)
+  n<-length(dis)
+  x<-dis-mu_hat #dif with the mean
+  
+  b1<- 1/n*sum(x^3)/sd_hat^3  #b1<-skewness(aux2$pH)
+  b2 <- (1/n*sum(x^4))/((1/(n)*sum(x^2))^(2)) #b2<-kurtosis(aux2$pH)
+  
+  jb_stat<-n/6*(b1^2+(b2-3)^2/4)
+  p_val<-pchisq(jb_stat,2,lower.tail=FALSE)
+  
+  return(c(jb_stat,p_val))
+}
+
+```
+
+Loop all type of data   
+
+```{r JB_test loop}
+
+jb<-tibble(data_filter=character(),statistic =numeric() , p_value = numeric())
+
+for (j in 1:3) { #filter of whine type 
+  plot_wine=""
+  if (j ==1) { aux <-filter(data, kind %in% c("red", "white"))
+    plot_wine = "all wines"
+  
+    } else if(j==2) { aux<-filter(data, kind %in% c("red")) 
+    plot_wine = "red wines"
+  } else { aux<-filter(data, kind %in% c("white")) 
+    plot_wine = "white wines"
+  }
+  
+  for (i in 1:3){ #filter of quality 
+    if (i ==1) { 
+      aux2<-filter(aux, quality_sep %in% c("low","medium","high"))
+      plot_name = paste (plot_wine, "all quality")
+    
+      } else if(i==2) { aux2<-filter(aux, quality_sep %in% c("low"))
+      plot_name = paste (plot_wine, "low quality")
+    } else { 
+      aux2<-filter(aux, quality_sep %in% c("high")) 
+     plot_name = paste (plot_wine, "high quality")
+    }
+    
+    a<-jb_test(aux2$pH)
+    
+    jb<-jb %>% add_row(tibble_row(
+      data_filter=plot_name,statistic = a[1] , p_value = a[2]))
+  }
+}
+jb
+```
+
+```{r}
+library(normtest)
+jb.norm.test(data$pH, nrepl=2000)
+kurtosis.norm.test(data$pH, nrepl=2000)
+skewness.norm.test(data$pH, nrepl=2000)
+```
+```{r}
+library(tseries)
+jarque.bera.test(data$pH)
+```
+
+```{r Shapiro-Wilk’s test}
+#aux<-filter(data, kind %in% c("red", "white"))
+aux<-filter(data, kind %in% c("red"))
+
+shapiro.test(aux$pH)
+```
+
+
+
+```{r}
+mu=500
+sd=5*sqrt(10)
+a=0.00001
+cat(mu-qnorm(1-a/2,0,sd), ";",mu+qnorm(1-a/2,0,sd))
+pnorm(-70/sd)
+
+
+```
+
+
+# 2. Study how the distribution of pH values of wines differs from the low quality and high qualities wines
+* low and high qualty have the same ditribution?
+* two-sample test 
+
+# Same Distribution
+
+## Boxplot
+```{r}
+
+
+```
+
+## QQ plot
+
+```{r}
+for (j in 1:3) {
+  plot_wine=""
+  if (j ==1) { aux <-filter(data, kind %in% c("red", "white"))
+    plot_wine = "all wines"
+  } else if(j==2) { aux<-filter(data, kind %in% c("red")) 
+    plot_wine = "red wines"
+  } else { aux<-filter(data, kind %in% c("white")) 
+    plot_wine = "white wines"
+  }
+  
+  high_ph <- filter(aux, quality_sep %in% c("high")) %>%  pull(pH)
+  low_ph  <- filter(aux, quality_sep %in% c("low"))  %>%  pull(pH)
+  qqplot(x=high_ph, y=low_ph, asp=1, main = paste("QQ-plot", plot_wine ))
+  abline( c(0,1))
+}
+
+```
+
+
+
+
+# 3. How data is realted between them
+* Correlation
+* Outlayers
+* Linear regression

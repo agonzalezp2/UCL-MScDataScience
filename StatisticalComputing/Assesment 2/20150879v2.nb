@@ -1,0 +1,653 @@
+---
+title: '20150879'
+date: "24/02/2021"
+output: pdf_document
+---
+# 1. Introduction
+```{r packages, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(lubridate)
+
+library(car)
+library(MASS)
+
+library(randomForest)
+library(xgboost)
+library(fastDummies)
+
+```
+
+The following study analises the data of sales of 12 different pizza products in a retail. The analisi was done under a framework of Marketing Mix, sales are related the four P, that can be realted with factors given in the data: Price (PRICE_BASE, PRICE), Position(STORE_NUM, DATE),PRODUCT (UPC, BRAND) and Promotion (DISPLAY, FEATURE, TPR_ONLY). In this study those relations will be considered.
+
+# 2. Data exploration
+```{r dta_gen, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+dta<-as.tibble(read.csv("grocery.csv", header = TRUE))
+
+dta$STORE_NUM<-as.factor(dta$STORE_NUM)
+dta$UPC<-as.factor(dta$UPC)
+dta$MANUFACTURER<-as.factor(dta$MANUFACTURER)
+dta$DISPLAY<-as.factor(dta$DISPLAY)
+dta$FEATURE<-as.factor(dta$FEATURE)
+dta$TPR_ONLY<-as.factor(dta$TPR_ONLY)
+dta$UNITS<-as.double(dta$UNITS)
+dta$BASE_PRICE<-as.double(dta$BASE_PRICE)
+dta$PRICE<-as.double(dta$PRICE)
+```
+
+```{r corr, echo=FALSE, fig.height=3.25, fig.width=6}
+pairs(dta[,c(10,1,2,3)],col=dta$MANUFACTURER, main="Pairwise Scatter Plots") # corr of quantitatives varibles
+```
+
+As can be seen in the pairwise code the variables BASE_PRICE and PRICE, are highly correlated ($\rho=0.85$). to solve this, it was created the variable DISCOUNT $(PRICE-BASE\_PRICE)/BASE\_PRICE$ ($\rho=-0.25$)
+
+```{r solvingCorrelation, include = FALSE}
+cat("PRICE-BASE_price correlation is:", cor(dta$BASE_PRICE,dta$PRICE))
+dta$DISCOUNT<- -(dta$PRICE-dta$BASE_PRICE)/dta$BASE_PRICE
+cat("\n","DISCOUNT-BASE_price correlation is:", cor(dta$BASE_PRICE,dta$DISCOUNT))
+```
+ 
+The graph bellow shows the distribution of the prices of the products. We can see that the brand has clear markets position. "Private Label" is cheaper than the rest, but doesn't work with discounts, moreover sometimes there are sales with prices above the base price. On the other hand, the other three manufacturers are more expensive and do work with discounts, except for TOMBSTONE. This is suggesting that the brand might have an interaction effect with discount, but this wasn’t confirmed while running the GLM models.
+
+```{r Products, echo=FALSE, fig.height=3, fig.width=9}
+p1<-ggplot(data=dta, aes(x=UPC, y=PRICE)) + geom_boxplot(aes(colour=MANUFACTURER)) + theme(legend.position = "top") +coord_flip()
+p2<-ggplot(data=dta, aes(x=UPC, y=DISCOUNT)) + geom_boxplot(aes(colour=MANUFACTURER)) + theme(legend.position = "none") +coord_flip()+
+  theme(axis.title.y=element_blank(),axis.text.y=element_blank())
+p3<-ggplot(data=dta, aes(x=UPC, y=UNITS)) + geom_boxplot(aes(colour=MANUFACTURER))+ theme(legend.position = "none") +coord_flip() +
+  theme(axis.title.y=element_blank(),axis.text.y=element_blank())
+
+legend <- cowplot::get_legend(p1) # takes teh legend form plot1
+
+grid.arrange(p1+theme(legend.position = "none"), p2, p3, legend,
+              ncol=3, nrow = 2,
+             layout_matrix = rbind(c(1,2,3), c(4,4,4)),
+             widths = c(3.7, 2.5,2.5), heights = c(2.5,0.2),
+             top="Distribution of Prices and Sales by UPC"
+             )
+```
+
+Other analysis and graphs were run to get better insigth of the data. For instance, it was investigated the seasonality of the market, to find trends over the years and also to analyse the averge sales per month of the sores in order to create new variables that allows to group the information and increase the generalization power of the models. As this it were created new two variables:
+
+* WEEK_YEAR: agrupation of WEEK_END_DATE  per number of the week of the year. This is inspiere in the graph bellow.
+* STORE_GROUP: agrupation of the stores per average sales per month. This agrupation is shown in the graph bellow.
+
+```{r GroupStores, message=FALSE, warning=FALSE, include=FALSE}
+#lets gorup the data of the stores
+dta_store<-dta%>%group_by(STORE_NUM,WEEK_END_DATE)%>%
+  summarise(Total_Week_Sale= sum(UNITS))%>%
+  group_by(STORE_NUM)%>%
+  summarise(Avg_Week_Sale=mean(Total_Week_Sale),
+            Total_Sale=sum(Total_Week_Sale))
+
+#lets create  table of frequencies to analyse it
+bins<-seq((min(dta_store$Avg_Week_Sale)-0.01),max(dta_store$Avg_Week_Sale),length.out=30)# create bins
+frec_table_store <- dta_store %>% mutate(bin = cut(Avg_Week_Sale,bins), right = FALSE) # add bins to frec
+frec_table_store<-group_by(frec_table_store, bin) %>% 
+  summarise(observed = n(), Total_SALE=sum(Total_Sale),per_frec=n()/nrow(dta_store))# group x by bins
+frec_table_store$lower = as.numeric( sub("\\((.+),.*", "\\1", frec_table_store$bin) )# add bins labels
+frec_table_store$upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", frec_table_store$bin))# add bins labels
+
+frec_acum<-rep(0,nrow(frec_table_store))
+j=0
+for (i in 1:nrow(frec_table_store)){
+  j=j+frec_table_store$per_frec[i]
+  frec_acum[i]=j
+}
+frec_table_store<-cbind(frec_table_store,frec_acum)
+
+#lets create our groupping table of stores
+cuts<-c(1:9)/10#lets create the following cuts in %
+limits<-rep(0,length(cuts))
+for (i in 1:length(cuts)) {
+  aux<-frec_table_store$frec_acum<cuts[i]
+  limits[i]<-max(frec_table_store$upper[aux])
+}
+limits<-c(0,limits)
+
+STORE_GROUP<-rep(length(limits),nrow(dta_store))
+for (i in 1:nrow(dta_store)) {
+  for (j in length(limits):1) {
+    if (dta_store$Avg_Week_Sale[i]>=limits[j]){
+      STORE_GROUP[i]<-j
+      break
+    }
+  }
+}
+dta_store<-cbind(dta_store,STORE_GROUP)
+dta_store$STORE_GROUP<-as.factor(dta_store$STORE_GROUP)
+dta_store
+
+dta<-dta%>%left_join(dta_store,by="STORE_NUM")%>% dplyr::select(BASE_PRICE, PRICE, WEEK_END_DATE, STORE_NUM, UPC, MANUFACTURER, DISPLAY, FEATURE, TPR_ONLY, UNITS, DISCOUNT, STORE_GROUP) 
+
+hist1<-ggplot(dta_store, aes(x = Avg_Week_Sale)) +
+  geom_histogram(aes(fill=STORE_GROUP),bins=30)+
+  ggtitle("Store agrupation per week sale")+
+  theme(legend.position = "top")
+```
+
+```{r a_brief_story_of_time, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+dta_week<-dta
+dta_week$DATE<-as.Date(dta$WEEK_END_DATE,origin='1899-12-27')
+dta_week$week_n<-as.factor(week(dta_week$DATE))
+dta$WEEK_YEAR<-dta_week$week_n
+
+dta_week$year<-as.factor(year(dta_week$DATE))
+dta_week<-dta_week%>%group_by(week_n,year)%>%summarise(sum_UNITS=sum(UNITS),avg_PRICE=sum(PRICE*UNITS)/sum(UNITS),avg_BASE_PRICE=sum(BASE_PRICE*UNITS)/sum(UNITS), avg_DISCOUNT=sum(DISCOUNT*UNITS)/sum(UNITS), Utility = sum(PRICE*UNITS))
+
+time_ser<- ggplot(data=dta_week, aes(x=week_n, y=sum_UNITS,group=year, colour=year)) +
+  geom_line() + theme(axis.text.x = element_text(angle=90))+ 
+  ggtitle("Average sales per week of the year")+
+  theme(legend.position = "top")+scale_x_discrete(breaks = levels(dta_week$week_n)[seq(1, 52, by=3)])
+
+```
+
+
+```{r echo=FALSE, fig.height=3, fig.width=9}
+grid.arrange(time_ser,hist1, nrow=1)
+
+#dta<-dta%>% dplyr::select(BASE_PRICE, PRICE, WEEK_END_DATE, STORE_NUM, UPC, MANUFACTURER, DISPLAY, FEATURE, TPR_ONLY, UNITS, DISCOUNT, STORE_GROUP,WEEK_YEAR) 
+```
+# 3. Looking for the best GLM and Advanced Regression Models 
+## 3.1. GLM Models
+
+In this section it is shown the analysis done to fit several general Linear Models for predict the the output variable, UNITS. Units is in the positive integers, but due to the nature of the problem, it can also be considered as if they were the real positives. Therefore, in this study it was considered different models of GLM form the families of Poisson, Quasipoisson and Gaussian. And the link function used were used are: "log" and "identity". 
+
+First, analysing the output variable, we can see in the following the qqplots of log(UNITS)compared with a Poisson and a normal distribution. Supporting the idea that UNITS follows a Poisson distribution, with some deviations in the tails, and that the link function log is a good idea.
+
+
+```{r eval=FALSE, include=FALSE}
+hist2<-ggplot(dta, aes(x=UNITS)) + 
+  geom_histogram(aes(y=..density..),binwidth = 3,color="black", fill="white")+
+  geom_vline(aes(xintercept=mean(UNITS)), color="blue", linetype="dashed", size=1)+
+  geom_density(alpha=.2, fill="#FF6666") +
+  ggtitle("UNITS Distribution Density")
+
+hist3<-ggplot(dta, aes(x=log(UNITS))) + 
+  geom_histogram(aes(y=..density..),binwidth = 0.33,color="black", fill="white")+
+  geom_vline(aes(xintercept=mean(log(UNITS))), color="blue", linetype="dashed", size=1)+
+  geom_density(alpha=.2, fill="#FF6666") +
+  ggtitle("Distribution Density of log(UNITS)")
+
+grid.arrange(hist2,hist3, nrow=1)
+
+
+```
+
+```{r echo=FALSE, fig.height=4, fig.width=9, message=FALSE, warning=FALSE}
+par(mfrow=c(1,2))
+qq1<-qqPlot(log(dta$UNITS), distribution = "pois", lambda = mean((dta$UNITS)), main="Poisson Q-Q Plot", ylab = "log(UNITS)")
+qqnorm(log(dta$UNITS))
+qqline(log(dta$UNITS))
+
+```
+
+
+
+
+
+### 3.1.1. Generating the best models for each family
+The strategy to find the models was to fit a first model that considers multiples regressors and interaction terms. The combinations of those regressor were based on the theorical effects of the Marketing Mix 4P: Product, Price, Place and Promotion. Then for each model considered was deeply analysed and the best model was choosen relating to the fulfilment of the model assumptions by performing variables transformation and eliminating outliers. 
+
+The assumptions to be proven are: 
+
+- **Homogeneity of error variance**. For gaussian linear models we analyse the plots ‘Residuas vs Fitted’ and ‘Predicted Values vs Pearson residuals’, we look that the trend red line to be as parallel as possible and to see an scatter of residual. Nevertheless since UNITS probably comes form a Poisson distribution (see test in data exploration section). So the errors can’t be negative when the model predicts a zero value, so it’s normal to see the negative errors variance growing with a “cap". Additionally, since the models considers a log link function it would be ok to see some logarithmic patterns, if the overall trend is constant.
+- **Gaussian distribution of residuals**. The QQ plot it’s not mandatory need to be a gaussian if we are assuming that the data comes form a Poisson distribution.
+
+```{r elmination of outlier, warning=FALSE, include=FALSE}
+dta_GLM<-dta
+dta_GLM$logUnits<-log(dta$UNITS)
+dta_GLM<-dta_GLM[c(-5724,-9346,-5004,-2981,-8276,-6687,-82730,-5553,-2483,-2983,-8271,-2633),]
+Deviance<-NULL
+AICs<-NULL
+Model_Name<-NULL
+```
+
+```{r poissonfull, eval=FALSE, include=FALSE}
+fit.pois0<-glm(formula= UNITS~ BASE_PRICE+PRICE+UPC*DISCOUNT+STORE_GROUP+ WEEK_YEAR+TPR_ONLY+FEATURE*DISPLAY+DISPLAY*DISCOUNT, family = poisson(link = "log"), data = dta_GLM)
+
+#Analisis part. commented to run it faster
+#summary(fit.pois0, correlation = FALSE)
+#anova(fit.pois0, test ="Chi") # as we know the dispersion paramter we use Chi
+#drop1(fit.pois0)
+#par(mfrow = c(2, 2))
+#plot(fit.pois0)
+```
+
+```{r Quasy-poissonFull, eval=FALSE, include=FALSE}
+fit.quapois0<-glm(formula= UNITS~ BASE_PRICE+PRICE+UPC*DISCOUNT+STORE_GROUP+WEEK_YEAR+TPR_ONLY+FEATURE*DISPLAY+DISPLAY*DISCOUNT, 
+               family = quasipoisson(link = "log"), data = dta_GLM)
+#Analisis
+#summary(fit.quapois0, correlation = FALSE)
+#anova(fit.quapois0, test ="F") # as we know the dispersion paramter we use Chi
+#drop1(fit.quapois0)7#
+#plot(fit.quapois0)
+```
+
+```{r gaussianFull Model, eval=FALSE, include=FALSE}
+fit.gaussian0<-glm(formula= UNITS~  BASE_PRICE+PRICE+UPC*DISCOUNT+STORE_GROUP+WEEK_YEAR+TPR_ONLY+FEATURE*DISPLAY+DISPLAY*DISCOUNT, 
+               family = gaussian(link = "log"), data = dta_GLM)
+#Analisis
+#summary(fit.quapois0, correlation = FALSE)
+#anova(fit.gaussian0, test ="Chi") # as we know the dispersion paramter we use Chi
+#drop1(fit.gaussian0)
+#plot(fit.gaussian0)
+```
+
+```{r NegBinFull Model, include=FALSE}
+negbin_model <- glm.nb(UNITS~  BASE_PRICE+PRICE+UPC+DISCOUNT+STORE_GROUP+WEEK_YEAR+TPR_ONLY+FEATURE*DISPLAY+DISPLAY*DISCOUNT, data = dta_GLM)
+
+#Analysis
+#summary(negbin_model)
+#anova(negbin_model, test ="Chi") # as we know the dispersion paramter we use Chi
+#drop1(negbin_model)
+#par(2,2)
+#plot(negbin_model)
+
+#Save data
+#Deviance[7]<-fit.gaussian0$deviance
+#AICs[7]<-AIC(fit.gaussian0)
+#Model_Name[7]<-"GLM Gaussian-Full Model"
+```
+
+Then, using the ‘drop1()’ command news models were generated with less variables that the original one so it was possible to compare them using Deviance. The final model used teh formula 'UNITS ~ PRICE + UPC + STORE_GROUP + WEEK_YEAR + DISPLAY'
+```{r NEgativebinomialFinal Model, echo=FALSE}
+negbin_model <- glm.nb(UNITS~ PRICE+UPC+STORE_GROUP+ WEEK_YEAR+DISPLAY, data = dta_GLM)
+
+#Analisis
+#summary(negbin_model)
+#anova(negbin_model, test ="Chi") # as we dont know the dispersion paramter we use F
+#par(2,2)
+#plot(negbin_model)
+```
+### 3.1.2. Best GLM model
+
+The best model for each family was chosen using de deviance, from the ‘anova’ tables, and analysis of the coefficient significance. And once the best model of each family was chosen the best model overall was selected by comparing the AIC between them. Note that the AIC can be compered as it was previously ensured the fulfilment of the model’s assumptions. The next Table summarizes this.
+
+## 3.2. Advanced regression Models
+It was also fitted different models belonging to the “Modern Regression” group, specifically Random Forest and Gradient Boosting using the ‘egboost’ packages. 
+
+### 3.2.1. Preparations
+It worth mentioning the procedure for model comparison. Both Random Forest and gradient boosting have a conveniently internal OOB function procedure, the leave one out validation procedure, so is easy to set model parameters that best fit the training data. 
+To compare the models between each other, a test set was defined with 1/9 of the data. The models were trained and validated in the other 8/9 of the data, and then the RMSE and MSE were calculated for the fitted models in the test set.
+
+```{r prerunning, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+n <- nrow(dta)
+train_size <- 8/9 
+train_points <- sample(1:n,round(train_size*n, digits = 0),replace = FALSE)
+MSE<-NULL
+RMSE<-NULL
+Row_name<-NULL
+ModelColnames<-list()
+params<-list()
+```
+
+
+```{r validationBoostin, include=FALSE}
+#For the gradient boosting models a function 'Boost_validation' was created to perform the validation
+Bosst_validation<-function(max_depth_options,data_train){
+  folds <- NULL
+  best_error <- Inf
+  best_md <- 0
+  best_nrounds <- 0
+  for (md in max_depth_options) {
+    cat("Trying maximum depth of", md, "...\n")
+    xgb_cv <- xgb.cv(data = as.matrix(data_train), label = dta$UNITS, 
+                            nfold = 5, nrounds = 100, max_depth = md, 
+                            folds = folds, verbose = FALSE)
+    if (is.null(folds)) {
+      folds <- xgb_cv$folds
+    }
+    trial_error <- min(xgb_cv$evaluation_log$test_rmse_mean)
+    if (trial_error < best_error) {
+      best_error <- trial_error
+      best_md <- md
+      best_nrounds <- which.min(xgb_cv$evaluation_log$test_rmse_mean)
+    }
+  }
+  cat("Hyperparameter selection: best nrounds is", best_nrounds, 
+    "and best maximum depth is", best_md, "\n")
+  return(c(best_md,best_nrounds))
+}
+
+```
+
+```{r DataPreparation, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+#and a new data set was created to input the categorical variables as Dummies, as the model required it.
+dta_boos<- dummy_cols(dta,c("UPC","MANUFACTURER", "STORE_GROUP","WEEK_YEAR"))
+dta_boos<- dta_boos%>%dplyr::select(-UPC,-STORE_NUM,-MANUFACTURER,-WEEK_YEAR,-UNITS,-STORE_GROUP,-WEEK_END_DATE)
+dta_boos$DISPLAY<-as.numeric(dta_boos$DISPLAY)
+dta_boos$FEATURE<-as.numeric(dta_boos$FEATURE)
+dta_boos$TPR_ONLY<-as.numeric(dta_boos$TPR_ONLY)
+#str(dta_boos)
+```
+
+### 3.2.2. Training and comparing the models
+Seven models were fitted and compared, three random forest and four gradient boosting each considering differents regressors. The variables selection was performed for both cases by running a first model with all the regressors and then eliminating the variables that had the lowest impact in the prediction in the validation set. i.e. by running the commands ‘importance’ and looking for the column ‘%IncMSE’ for random forests models and the ‘xgb.importance’ command and ‘Gain’ column for Gradient boosting.
+
+```{r randomforest, include=FALSE}
+#fitting the random forest
+fit_rf0 <- randomForest(UNITS ~ .-STORE_NUM-BASE_PRICE-WEEK_END_DATE, data = dta, subset = train_points,importance=TRUE, proximity = TRUE)
+print(fit_rf0)
+rf_pred <- predict(fit_rf0, newdata = dta[-train_points,])
+cat("Mean absolute error:", mean(abs(rf_pred - dta$UNITS[-train_points])), "\n")
+
+#Saving performace
+MSE[1]<-mean(abs(rf_pred - dta$UNITS[-train_points]))
+RMSE[1]<-(mean((rf_pred - dta$UNITS[-train_points])^2))^(1/2)
+Row_name[1]<-"fit_rf0"
+
+#Analisis
+fit_imp <- importance(fit_rf0, type = 1)#generate importance table 
+as.data.frame(fit_imp[order(fit_imp,decreasing =TRUE),])
+
+#varImpPlot(fit_rf0)
+```
+```{r randomforest1, include=FALSE}
+#fitting the model
+fit_rf1 <- randomForest(UNITS ~ .-STORE_NUM-BASE_PRICE-WEEK_END_DATE-TPR_ONLY, data = dta, subset = train_points,importance=TRUE)
+print(fit_rf1)
+rf_pred <- predict(fit_rf1, newdata = dta[-train_points,])
+cat("Mean absolute error:", mean(abs(rf_pred - dta$UNITS[-train_points])), "\n")
+
+#Saving the performace in test set
+MSE[2]<-mean(abs(rf_pred - dta$UNITS[-train_points]))
+RMSE[2]<-(mean((rf_pred - dta$UNITS[-train_points])^2))^(1/2)
+Row_name[2]<-"fit_rf1"
+
+#analisis of the model
+fit_imp <- importance(fit_rf1, type = 1)#generate importance table 
+as.data.frame(fit_imp[order(fit_imp,decreasing =TRUE),])
+
+#varImpPlot(fit_rf1)
+```
+
+```{r randomforest2, include=FALSE}
+#fitting the model
+fit_rf2 <- randomForest(UNITS ~ .-STORE_NUM-BASE_PRICE-MANUFACTURER-WEEK_END_DATE-TPR_ONLY, data = dta, subset = train_points,importance=TRUE)
+model_rf<-fit_rf2
+print(model_rf)
+rf_pred <- predict(model_rf, newdata = dta[-train_points,])
+cat("Mean absolute error:", mean(abs(rf_pred - dta$UNITS[-train_points])), "\n")
+
+#Saving the model
+MSE[3]<-mean(abs(rf_pred - dta$UNITS[-train_points]))
+RMSE[3]<-(mean((rf_pred - dta$UNITS[-train_points])^2))^(1/2)
+Row_name[3]<-"fit_rf2"
+
+#analysing the model
+#fit_imp <- importance(model_rf, type = 1)#generate importance table 
+#as.data.frame(fit_imp[order(fit_imp,decreasing =TRUE),])
+
+#varImpPlot(model_rf)
+```
+
+```{r, include=FALSE}
+max_depth_options <- c(3,4,5,6)
+dta_use<-dta_boos
+ModelColnames[[4]]<-colnames(dta_use)#save varibles to be used in the final model
+
+#find the best paramters
+best_paramers<-Bosst_validation(max_depth_options,dta_use)
+params[[4]]<-best_paramers#saving the parameters
+best_md<-best_paramers[1]
+best_nrounds<-best_paramers[2]
+
+
+# train the final model and test
+xgb_opt <- xgboost(data = as.matrix(dta_use[train_points, ]), 
+                          label = dta$UNITS[train_points], 
+                          nrounds = best_nrounds, max_depth = best_md, verbose = FALSE)
+xgb_opt_pred <- predict(xgb_opt, as.matrix(dta_use[-train_points,]))
+cat("Mean absolute error for optimised XGB:",
+    mean(abs(xgb_opt_pred - dta$UNITS[-train_points])), "\n")
+
+#save the model performance in test set
+MSE[4]<-mean(abs(xgb_opt_pred - dta$UNITS[-train_points]))
+RMSE[4]<-(mean((xgb_opt_pred - dta$UNITS[-train_points])^2))^(1/2)
+Row_name[4]<-paste("xgb-",ncol(dta_use),"vars (parms:",best_nrounds,"-",best_md,")")
+```
+
+```{r, include=FALSE}
+#Model analysis
+model<-xgb_opt
+xgb_importance <- xgb.importance(feature_names = names(dta_boos), 
+                                    model = model)
+xgb_importance
+xgb.plot.importance(xgb_importance)
+```
+
+
+```{r, include=FALSE}
+#cut the variable that doesnt improve the model
+tresh<-10^(-4) # treschold to reduce select the columns to be used in the next iteration
+dta_use<-dta_boos[,xgb_importance$Feature[1:63]]
+#str(dta_use)
+ModelColnames[[5]]<-colnames(dta_use)#save varibles to be used in the final model
+
+#find the best paramters
+best_paramers<-Bosst_validation(max_depth_options,dta_use)
+params[[5]]<-best_paramers#saving the parameters
+best_md<-best_paramers[1]
+best_nrounds<-best_paramers[2]
+
+# train the final model and test
+xgb_opt2 <- xgboost(data = as.matrix(dta_use[train_points, ]), 
+                          label = dta$UNITS[train_points], 
+                          nrounds = best_nrounds, max_depth = best_md, verbose = FALSE)
+xgb_opt_pred <- predict(xgb_opt2, as.matrix(dta_use[-train_points,]))
+cat("Mean absolute error for optimised XGB:",
+    mean(abs(xgb_opt_pred - dta$UNITS[-train_points])), "\n")
+
+#Save the test set
+MSE[5]<-mean(abs(xgb_opt_pred - dta$UNITS[-train_points]))
+RMSE[5]<-(mean((xgb_opt_pred - dta$UNITS[-train_points])^2))^(1/2)
+Row_name[5]<-paste("xgb-",ncol(dta_use),"vars (parms:",best_nrounds,"-",best_md,")")
+```
+
+```{r, include=FALSE}
+#Analysis of variable
+model<-xgb_opt2
+xgb_importance <- xgb.importance(feature_names = names(dta_boos), 
+                                    model = model)
+xgb_importance
+xgb.plot.importance(xgb_importance)
+```
+
+```{r boost6, include=FALSE}
+#cut the variable that doesnt improve the model
+tresh<-5*10^(-4) # treschold to reduce select the columns to be used in the next iteration
+dta_use<-dta_boos[,xgb_importance$Feature[1:54]]
+#str(dta_use)
+ModelColnames[[6]]<-colnames(dta_use)#save varibles to be used in the final model
+
+#find the best paramters
+best_paramers<-Bosst_validation(max_depth_options,dta_use)
+params[[6]]<-best_paramers#saving the parameters
+best_md<-best_paramers[1]
+best_nrounds<-best_paramers[2]
+
+# train the final model and test
+xgb_opt2 <- xgboost(data = as.matrix(dta_use[train_points, ]), 
+                          label = dta$UNITS[train_points], 
+                          nrounds = best_nrounds, max_depth = best_md, verbose = FALSE)
+xgb_opt_pred <- predict(xgb_opt2, as.matrix(dta_use[-train_points,]))
+cat("Mean absolute error for optimised XGB:",
+    mean(abs(xgb_opt_pred - dta$UNITS[-train_points])), "\n")
+
+#Save the test set
+
+MSE[6]<-mean(abs(xgb_opt_pred - dta$UNITS[-train_points]))
+RMSE[6]<-(mean((xgb_opt_pred - dta$UNITS[-train_points])^2))^(1/2)
+Row_name[6]<-paste("xgb-",ncol(dta_use),"vars (parms:",best_nrounds,"-",best_md,")")
+```
+
+```{r, include=FALSE}
+#Analysis of variable
+model<-xgb_opt2
+xgb_importance <- xgb.importance(feature_names = names(dta_boos), 
+                                    model = model)
+xgb_importance
+xgb.plot.importance(xgb_importance)
+```
+
+```{r boost, include=FALSE}
+#cut the variable that doesnt improve the model
+tresh<-10^(-3) # treschold to reduce select the columns to be used in the next iteration
+dta_use<-dta_boos[,xgb_importance$Feature[1:33]]
+#str(dta_use)
+ModelColnames[[7]]<-colnames(dta_use)#save varibles to be used in the final model
+
+#find the best paramters
+best_paramers<-Bosst_validation(max_depth_options,dta_use)
+params[[7]]<-best_paramers#saving the parameters
+best_md<-best_paramers[1]
+best_nrounds<-best_paramers[2]
+
+# train the final model and test
+xgb_opt2 <- xgboost(data = as.matrix(dta_use[train_points, ]), 
+                          label = dta$UNITS[train_points], 
+                          nrounds = best_nrounds, max_depth = best_md, verbose = FALSE)
+xgb_opt_pred <- predict(xgb_opt2, as.matrix(dta_use[-train_points,]))
+cat("Mean absolute error for optimised XGB:",
+    mean(abs(xgb_opt_pred - dta$UNITS[-train_points])), "\n")
+
+#Save the test set
+
+MSE[7]<-mean(abs(xgb_opt_pred - dta$UNITS[-train_points]))
+RMSE[7]<-(mean((xgb_opt_pred - dta$UNITS[-train_points])^2))^(1/2)
+Row_name[7]<-paste("xgb-",ncol(dta_use),"vars (parms:",best_nrounds,"-",best_md,")")
+```
+
+### 3.2.3 Best Advanced Regression Model
+The table bellow shows these results.
+```{r AdvRegAnalysis, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+adv_results<-data.frame(MSE,RMSE)
+row.names(adv_results)<-Row_name
+adv_results
+```
+
+The final model chosen was the model Gradient Boosting with 63 regressors, for having the best MSE and RMSE.
+
+# 4. Selection of the Final model
+To compare the predictive power of those two different types of models a 10-fold cross validation was computed, and it was consistently found that the Gradient Boosting Model had a lowest RMSE, and therefore a better predicting power.
+
+
+```{r include=FALSE}
+n <- nrow(dta)
+k <- 10 # Number of folds
+fold_idx <- sample(cut(1:n, breaks = k, labels = FALSE)) # randomly selecting lines
+RMSE_errors <- matrix(-1, nrow = k, ncol = 2)
+
+for (j in 1:k) {
+  # Get the k-th partition
+  test_idx <- which(fold_idx == j)
+  #train_set <- dta[-test_idx, ]
+  test_set <- dta[test_idx, ]
+  
+  # Train and test the model
+  #preidcition
+  glm.model <- glm.nb(UNITS~ PRICE+UPC+STORE_GROUP+ WEEK_YEAR+DISPLAY, data = dta[-test_idx,])
+  y_hat <- predict(glm.model, dta[test_idx,])
+  RMSE_errors[j,1] <- (mean((test_set$UNITS - y_hat)^2))^(1/2)
+  
+  
+  adv.model <- model <- xgboost(data = as.matrix(dta_use[-test_idx, ]), 
+                      label = dta$UNITS[-test_idx], 
+                      nrounds = best_nrounds, max_depth = best_md, verbose = FALSE)
+  y_hat <- predict(adv.model, as.matrix(dta_use[test_idx,]))
+  RMSE_errors[j,2] <- (mean((y_hat - dta$UNITS[test_idx])^2))^(1/2) 
+}
+colnames(RMSE_errors)<-c("glm","advReg")
+RMSE_errors
+```
+
+This claim is proven by computing the following paired t.test on the 10-folds RMSE accuracy of these two models.
+```{r ttest, echo=FALSE}
+ttest<-t.test(RMSE_errors[,1],RMSE_errors[,2],paired=TRUE)
+cat("Paired t-test","\nt = ",ttest$statistic,", df =",ttest$parameter, ", p-value = ", ttest$p.value)
+```
+
+These two models have different pros and cons. The general linear model has the advantage of providing understanding on how the data behaves, and what is the impact of changing something one of the regressors, and its predicted values are in the output variable’s domain. On the other hand, the gradient boosting model is far superior in terms of predicting capabilities (at least in this case), and is much easier to set up, but it is not easy to take decision using it.
+
+## 4.2 Final Model Analysis
+
+The final model will be the Gradient Boosting with 63 regressors and the influence of the most relevant six variables, in terms of "Gain", are explainde next:
+
+```{r boostfinal, include=FALSE}
+selectedModel<-5
+dta_use<-dta_boos[,ModelColnames[[selectedModel]]]#get teh columns that the model uses
+
+#find the best paramters
+best_paramers<-params[[selectedModel]]# loading parameters
+best_md<-best_paramers[1]
+best_nrounds<-best_paramers[2]
+
+# train the final model and test
+final_model <- xgboost(data = as.matrix(dta_use[train_points, ]), 
+                          label = dta$UNITS[train_points], 
+                          nrounds = best_nrounds, max_depth = best_md, verbose = FALSE)
+
+#Analysis of variable
+xgb_importance <- xgb.importance(feature_names = names(dta_boos), 
+                                    model = final_model)
+head(xgb_importance)
+#xgb.plot.importance(xgb_importance)
+```
+
+* BASE_PRICE:  is the most important variable on terms of accuracy(30%), but it seems that only a 2% of the points required that criterion, finally its seems that it is not an stable parameter as only a 5% of all trees use it.
+* PRICE and DISPLAY are also important criterion for accuracy and are more consistently selected by the prunes, and more than the 15% of the points required that value to make a prediction.
+* TPR_ONLY, UPC_1111087395 and DISCOUNT, impact around a 5% of the RMSE each, but not stable nor much used by the predicting nodes.
+
+Finally, the final model was tested by estimating what would be the sales if the product UPC = 7192100337, had been at a discount of 10%, during WEEK END DATE= 39995 in STORE NUM = 8263. In comparation with what was sold: 13 units our models forecast:
+
+
+```{r transforming Data, message=FALSE, warning=FALSE, include=FALSE, paged.print=TRUE}
+#information
+stor<-8263
+weekdate<-39995
+product<-7192100337
+DISC<-0.1
+disp= #DISPLAY
+feat=0 #FEATURE
+tpr=0 # TPR_ONLY
+
+#finding the data in the data base, goupping in case ther is more than on regist
+dta_test<-dta%>%
+  filter(STORE_NUM==stor,UPC==product,WEEK_END_DATE==weekdate)%>%
+  group_by(WEEK_END_DATE,STORE_NUM,UPC,MANUFACTURER,STORE_GROUP,WEEK_YEAR)%>%
+  summarise(BASE_PRICE=mean(BASE_PRICE),DISPLAY=first(DISPLAY),FEATURE=first(FEATURE),
+            TPR_ONLY=first(TPR_ONLY),UNITS=first(UNITS),PRICE=first(PRICE))%>%
+  print()
+#adding the new values
+dta_test$PRICE<-dta_test$BASE_PRICE*(1-DISC)
+dta_test$DISCOUNT<-DISC
+dta_test$DISPLAY<-as.factor(disp)
+dta_test$FEATURE<-as.factor(feat)
+dta_test$TPR_ONLY<-as.factor(tpr)
+ 
+#creating a new data set with the fortmat required by gradint boosting
+dta_boos2<-dta%>% add_row(dta_test) # our test data will be at last
+dta_boos2<- dummy_cols(dta_boos2,c("UPC","MANUFACTURER", "STORE_GROUP","WEEK_YEAR"))
+dta_boos2<- dta_boos2%>%dplyr::select(-UPC,-STORE_NUM,-MANUFACTURER,-WEEK_YEAR,-UNITS,-STORE_GROUP,-WEEK_END_DATE)
+dta_boos2$DISPLAY<-as.numeric(dta_boos2$DISPLAY)
+dta_boos2$FEATURE<-as.numeric(dta_boos2$FEATURE)
+dta_boos2$TPR_ONLY<-as.numeric(dta_boos2$TPR_ONLY)
+
+dta_test2<-dta_boos2[nrow(dta_boos2),]
+dta_test2<-dta_test2[,ModelColnames[[selectedModel]]]
+```
+
+
+```{r forecating}
+y_hat <- predict(final_model, as.matrix(dta_test2))
+round(y_hat,0)
+```
+
+
+
+
+
+
+

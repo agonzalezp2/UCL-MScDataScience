@@ -1,0 +1,4 @@
+"0","# 1. read the data"
+"0","t_fail<-scan(""lights.dat"")"
+"2","Read 100 items
+"

@@ -1,0 +1,1 @@
+"0","pairs(dta[,c(10,1,2,3)],col=dta$MANUFACTURER, main=""Pairwise Scatter Plots"") # corr of quantitatives varibles"

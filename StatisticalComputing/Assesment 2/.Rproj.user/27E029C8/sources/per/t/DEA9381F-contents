@@ -1,0 +1,550 @@
+---
+title: "ICA-1-Stat029"
+author: "ag"
+date: "04/02/2021"
+output: html_document
+---
+```{r pacakges, warning=FALSE}
+library("dplyr")
+library("ggplot2")
+library(normtest)
+
+# For sum-to-zero parameterisation:
+options(contrasts = c("contr.sum", "contr.sum"))
+
+```
+
+
+
+#I) Sample Size considerations
+## 1. Load data
+```{r}
+alpha <- 0.01
+# Set constraints:
+options(contrasts=c("contr.sum", "contr.sum"))
+
+# Data:
+library(readr)
+DB <- read.csv("DB.csv")
+
+#DB<-DB[!is.na(DB$DT),]
+DB$milk_level<-factor(rep("high",nrow(DB)),levels = c("low", "high"))
+DB$milk_level[DB$Milk==0.1]<-factor("low")
+DB$Time_day<-factor(DB$Time_day, levels=c("Morning", "Afternoon","Evening"))
+DB$Material<-factor(DB$Material, levels=c("Ceramic", "Glass"))
+DB$Treat<-as.factor(DB$Treat)
+colnames(DB)[1]<-"Day_Test"
+
+#add Day ID
+day_transf<-data.frame(Day_Test=c("Friday", "Saturday","Sunday"), Day=as.factor(c("Day_3", "Day_4", "Day_5")))
+
+DB<-DB %>% left_join(day_transf, by="Day_Test")
+DB$Day<-as.factor(DB$Day)
+summary(DB)
+
+```
+
+## 2. Data size calculation
+
+```{r fit1}
+DB2<-DB[1:12,]
+fit     <- aov(DT ~ Time_day * Treat, data=DB2)
+summary(fit)
+
+p <- coef(summary.lm( fit ))[,1]
+cat("\n","---- Factorial effects -------", "\n")
+2*p[2:6] #factorial effect, the contrasts
+```
+
+
+```{r paramters}
+D<-1. #treshold 
+sigma<-sqrt(0.08) #sd of residuals
+a<-2*2 #Nr of treatment groups
+b<-3 #Nr of bloks
+
+ns<-c (1,2,3)#Nr of replications per experiments
+
+```
+
+###2.1. Using OC curves for fixed terms
+see Mongmery chapter "5.3.5 Choice of Sample Size"
+
+```{r phi_coef_function}
+
+phi_funct <- function(D,a,b,n, sigma, fact="A") {
+  #This function computes the $\phi$ value to be used in the characterisitc Curves Parameters. 
+  # - D: treshold
+  # - a: number of levels of factor A
+  # - b: number of levels of factor B
+  # - n: number of replicates 
+  # - sigma: the standar deviation unsig the ANOVA model
+  # - fact: to indicate to which factor will
+  # the phi will be calcualted. it can be 'A', 'B', 'AB' 
+  if(fact=="A"){
+    phi2<-(n*b*D^2)/(2*a*sigma^2)
+    phi<-phi2^(1/2)
+    return(phi)
+  }else if(fact=="B"){
+    phi2<-(n*a*D^2)/(2*b*sigma^2)
+    phi<-phi2^(1/2)
+    return(phi)
+  }else if (fact=="AB"){
+    phi2<-(n*D^2)/(2*sigma^2/((a-1)*(b-1)+1))
+    phi<-phi2^(1/2)
+    return(phi)
+  }else{ 
+    return(-1)}
+  
+}
+```
+
+```{r table_for_OC_curve}
+
+phi <- rep(0, length(ns))
+phi_fact<- matrix(nrow = length(ns), ncol = 3)
+colnames(phi_fact)=c("A","B","AB")
+v1 <- rep(0, length(ns))
+v2 <- rep(0, length(ns))
+for (i in 1:length(ns)) {
+  n<-ns[i]
+  phi_fact[i,1]<- phi_funct(D,a,b,n, sigma, "A")
+  phi_fact[i,2]<- phi_funct(D,a,b,n, sigma, "B")
+  phi_fact[i,3]<- phi_funct(D,a,b,n, sigma, "AB")
+  phi[i]<-min(phi_fact[i,1],phi_fact[i,2],phi_fact[i,3])
+  v1[i]<-a-1
+  if(n==1){v2[i]<-(a-1)*(b-1)}
+  else{v2[i]<-a*b*(n-1)}
+}
+df<-data.frame(ns,v1,v2,phi)
+rm(phi,v1,v2)
+df
+print(phi_fact)
+
+```
+
+```{r}
+#found using Anexes "V Operating Characteristic Curves for the Fixed Effects Model Analysis of Variance" from Montgomery book pg 693
+beta_0.01<-c(0.9,0.06,0.001) # beta for alpha level of confidence 0.05
+beta_0.05<-c(0.31,0.005,0.0015) #beta for alpha level of confidence 0.01
+if (alpha==0.01){
+  power_exp<-1-beta_0.01
+}else { 
+  power_exp<-1-beta_0.05
+}
+df<-data.frame(df[,1:4],power_exp)
+df
+```
+
+
+
+###2.2. Sample size usign models for two way anova (is for only one factor)
+Sheet 4 ex2
+####2.2.1. for a 
+```{r}
+upperppoint <- function(r,b,m,alpha){
+  if(m==1){
+    df <- (r-1)*(b-1)
+  }else{
+    df <- r*b*(m-1)
+  }
+  return(qt(1-alpha/2,df=df))
+}
+
+L <- rep(0, length(ns))
+for (i in 1:length(ns)) {
+  n<-ns[i]
+  up<-upperppoint(a,b,n,alpha)
+  L[i]<-2*up*sigma*sqrt(2/(n*b))
+  
+}
+
+data.frame(ns,L)
+```
+
+usign the power anova test of a one way anova.
+I shoundt as it ingrneos the df and the model is quite different
+```{r}
+
+power.anova.test(groups = 3, n = 2, between.var = 0.08, within.var = 0.08, sig.level = 0.01)
+
+```
+
+
+
+
+
+
+###2.3. idea 1 power of the test in a error~N
+```{r powerfunction}
+beta_two <- function(alpha, L, sigma, n) {
+  #function to calculate the power of a nomal distribution two tails
+  # - L: treshold for both sides
+  # - sigma: satndar deivation
+  # - alpha: is the 
+  # - n: sample size
+  q_bottom <- qnorm(alpha / 2, 0, sigma / sqrt(n))
+  q_top    <- qnorm(1 - alpha / 2, 0, sigma / sqrt(n))
+  result <- pnorm(q_bottom, mean = L, sd = sigma / sqrt(n)) + 
+    pnorm(q_top, mean = L, sd = sigma / sqrt(n), lower.tail = FALSE)
+  return(result)
+}
+
+beta_one <- function(alpha, L, sigma, n){
+  #function to calculate the power of a normal distribution with one tails
+  # - L: treshold for both sides
+  # - sigma: satndar deivation
+  # - alpha: is the 
+  # - n: sample size
+  q_top    <- qnorm(1 - alpha, 0, sigma / sqrt(n))
+  result   <- pnorm(q_top, mean = L, sd = sigma / sqrt(n), lower.tail = FALSE)
+  return(result)
+}
+
+```
+
+```{r}
+D<-1. #treshold 
+sigma<-sqrt(0.08) #sd of residuals
+a<-2*2 #Nr of treatment groups ??
+
+b<-3 #Nr of bloks
+r<-2 #replicates
+n <- b*(r-1) #replicates * groups
+
+beta_two(alpha, D, sigma, n)
+#beta_one(alpha, L, sigma, n)
+
+```
+
+
+#II) $2^2$ Factorial ANOVA
+
+##ANOVA Model
+
+```{r treat_day}
+fit     <- aov(DT ~ Day * Treat, data=DB)
+summary(fit)
+```
+
+```{r fit1}
+fit     <- aov(DT ~ Day + Material+milk_level, data=DB)
+summary(fit)
+
+p <- coef(summary.lm( fit ))[,1]
+cat("\n","---- Factorial effects -------", "\n")
+2*p[2:6] #factorial effect, the contrasts
+```
+```{r}
+fit2     <- aov(DT ~ Day + Material*milk_level + Day:Material + Day:milk_level, data=DB)
+summary(fit2)
+```
+
+
+```{r}
+fit3     <- aov(DT ~ milk_level * Material+Day + Day:Material:milk_level, data=DB)
+summary(fit3)
+```
+##2.1 Cheching assumptions
+```{r}
+# Check assumptions:
+resid  <- residuals(fit)
+fitted <- fitted.values(fit)
+opar   <- par(mfrow = c(1,2))         
+plot(fitted, resid, main = "(a) Residuals v. Fitted Values",pch=19,
+     cex=1.2,col="blue")
+qqnorm(resid, main = "(b) Normal Q-Q Plot",pch=19, col="blue",cex=1.2,
+       xlab = "Theoretical Quantiles",
+       ylab = "Sample Quantiles", plot.it = TRUE)
+qqline(resid,lwd=1.2)
+par(opar)
+
+
+#Tests
+cat("\n test for Normality of residuals \n")
+shapiro.test(resid)
+#jb.norm.test(resid, nrepl=2000)
+cat("\n test for equal variance of residuals \n")
+#t.test(resid[DB$milk_level=="high"],resid[DB$milk_level=="low"],var.equal=T)
+#var.test(resid  ~ DB.milk_level, data = data.frame(resid,DB$milk_level))
+bartlett.test(resid  ~ DB.milk_level, data = data.frame(resid,DB$milk_level))
+
+
+```
+
+
+```{r plots}
+lim_in_y = c(9.3,14.5)
+library("ggpubr")
+p1<-ggline(DB, x = "milk_level", y = "DT", color = "Day",
+       add = c("mean_se", "dotplot"),
+                 xlab = "Milk Level", ylab="Temperature Reduction (°C)", ylim=lim_in_y
+       #main="Interaction Plot Milk level vs time of the day"
+       )+  
+  theme(legend.position = c(.95, .95), legend.justification = c("right", "top"))
+
+
+p2<-ggline(DB, x = "milk_level", y = "DT", color = "Material",
+       add = c("mean_se", "dotplot"),
+                 xlab = "Milk Level", ylab="", ylim=lim_in_y
+       #main="Interaction Plot Milk level vs Material"
+       )+  
+  theme(legend.position = c(.95, .95), legend.justification = c("right", "top"))
+
+
+p3<-ggline(DB, x = "Material", y = "DT", color = "Day",
+       add = c("mean_se", "dotplot"),
+                 xlab = "Material", ylab="", ylim=lim_in_y
+       #main="Interaction Plot Material  vs time of the day"
+       ) +  
+  theme(legend.position = c(.98, .95), legend.justification = c("right", "top"))
+
+p4<-ggline(DB, x = "Day", y = "DT", color = "milk_level",
+       add = c("mean_se", "dotplot"),
+                 xlab = "Day", ylab="", ylim=lim_in_y
+       #main="Interaction Plot Material  vs time of the day"
+       ) +  
+  theme(legend.position = c(.98, .75), legend.justification = c("right", "top"))
+
+ggarrange(p1,p4,p3,   nrow = 1,  top = "Interaction Plots")
+
+
+```
+
+```{r plots}
+p1
+p2
+p3
+p4
+```
+
+
+```{r}
+par(mfrow=c(1,3))
+boxplot(DT~Material, data=DB, ylab="Temperature Reduction (°C)",
+xlab="material")
+boxplot(DT~milk_level,data=DB, ylab="",
+xlab="Milk Level")
+
+boxplot(DT~Day,data=DB, ylab="",
+xlab="Day")
+
+par(mfrow=c(1,3))
+
+interaction.plot(DB$milk_level , DB$Material, DB$DT,
+ylab="Temperature Reduction (°C)", xlab="Milk Level",
+trace.label="Material", cex=0.5, ylim = c(9.7,14.3))
+
+
+interaction.plot(DB$milk_level , DB$Day, DB$DT,
+ylab="", xlab="Milk Level",
+trace.label="Day", cex=0.5, ylim = c(9.7,14.3))
+
+interaction.plot(DB$Material , DB$Day, DB$DT,
+ylab="", xlab="Material",
+trace.label="Day", cex=0.5, ylim = c(9.7,14.3))
+
+#legend("topright", inset=.02)
+
+
+```
+##3.3 Final Model 1
+```{r final model}
+fit_final <- aov(DT ~ Day + Material+milk_level, data=DB)
+summary(fit_final)
+
+p <- coef(summary.lm( fit_final ))[,1]
+cat("\n","---- Factorial effects -------", "\n")
+2*p[2:6] #factorial effect, the contrasts
+```
+
+```{r}
+# Check assumptions:
+resid  <- residuals(fit_final)
+fitted <- fitted.values(fit)
+opar   <- par(mfrow = c(1,2))         
+plot(fitted, resid, main = "(a) Residuals v. Fitted Values",pch=19,
+     cex=1.2,col="blue")
+qqnorm(resid, main = "(b) Normal Q-Q Plot",pch=19, col="blue",cex=1.2,
+       xlab = "Theoretical Quantiles",
+       ylab = "Sample Quantiles", plot.it = TRUE)
+qqline(resid,lwd=1.2)
+par(opar)
+
+
+#Tests
+cat("\n test for Normality of residuals \n")
+shapiro.test(resid)
+#jb.norm.test(resid, nrepl=2000)
+cat("\n test for equal variance of residuals \n")
+#t.test(resid[DB$milk_level=="high"],resid[DB$milk_level=="low"],var.equal=T)
+#var.test(resid  ~ DB.milk_level, data = data.frame(resid,DB$milk_level))
+bartlett.test(resid  ~ DB.milk_level, data = data.frame(resid,DB$milk_level))
+```
+
+```{r}
+# ANOVA:
+anova <- summary(fit_final)
+print(anova)
+print(round(coef(summary.lm(fit_final)),3))
+cat("\n","\n")
+
+# effects using the model ANOVA
+ef.matrix<-coef(summary.lm(fit_final))[2:5,1:2]
+ef.matrix[,1]<-2*ef.matrix[,1]
+ef.matrix[,2]<-sqrt(4*ef.matrix[,2]^2)
+
+print(ef.matrix)
+
+# SE factorial effect A given current model:
+ef.anova   <- coef(summary.lm(fit_final))[4,1]
+ef.effectMaterial <-2*ef.anova
+ef.anova   <- coef(summary.lm(fit_final))[5,1]
+ef.effectMilk <- 2*ef.anova
+
+# SE factorial effect A given current model:
+se.anova   <- coef(summary.lm(fit_final))[4,2]#MAterial
+se.effectMaterial <- sqrt( 4*se.anova^2 )
+se.anova   <- coef(summary.lm(fit_final))[5,2]#Milk
+se.effectMilk <- sqrt( 4*se.anova^2 )
+
+cat("\nFactorial effect Material (using aov) =  ",ef.effectMaterial,"\n")
+cat("\nSE factorial effect Material (using aov) =  ",se.effectMaterial,"\n")
+
+cat("\nFactorial effect Milk (using aov) =  ",ef.effectMilk,"\n")
+cat("\nSE factorial effect Milk (using aov) =  ",se.effectMilk,"\n")
+```
+
+##3.4 Final Model 2
+```{r final model}
+fit_final2 <- aov(DT ~ milk_level, data=DB)
+summary(fit_final2)
+
+p <- coef(summary.lm( fit_final2 ))[,1]
+cat("\n","---- Factorial effects -------", "\n")
+2*p[2:6] #factorial effect, the contrasts
+```
+
+```{r}
+# Check assumptions:
+#Graphically
+resid  <- residuals(fit_final2)
+fitted <- fitted.values(fit_final)
+opar   <- par(mfrow = c(1,2))         
+plot(fitted, resid, main = "(a) Residuals v. Fitted Values",pch=19,
+     cex=1.2,col="blue")
+qqnorm(resid, main = "(b) Normal Q-Q Plot",pch=19, col="blue",cex=1.2,
+       xlab = "Theoretical Quantiles",
+       ylab = "Sample Quantiles", plot.it = TRUE)
+qqline(resid,lwd=1.2)
+par(opar)
+
+#Tests
+cat("\n test for Normality of residuals \n")
+shapiro.test(resid)
+jb.norm.test(resid, nrepl=2000)
+
+cat("\n test for equal variance of residuals \n")
+t.test(resid[DB$milk_level=="high"],resid[DB$milk_level=="low"],var.equal=T)
+var.test(resid  ~ DB.milk_level, data = data.frame(resid,DB$milk_level))
+bartlett.test(resid  ~ DB.milk_level, data = data.frame(resid,DB$milk_level))
+```
+
+
+```{r}
+# ANOVA:
+anova <- summary(fit_final2)
+print(anova)
+cat("\n")
+print(coef(summary.lm(fit_final2)))
+cat("\n")
+print(round(coef(summary.lm(fit_final2)),3))
+
+# effects using the model ANOVA
+ef.matrix<-coef(summary.lm(fit_final2))[2,1:2]
+ef.matrix[1]<-2*ef.matrix[1]
+ef.matrix[2]<-sqrt(4*ef.matrix[2]^2)
+#colnames(ef.matrix)<-c("F. Effect", "s.e.")
+cat("\n Factorial effects and s.e. (using aov)","\n")
+print(ef.matrix)
+```
+
+
+
+
+
+
+#4.Examples form Courses
+```{r factorialEffects}
+DB_t<-tibble(DB)
+
+mr<-DB_t%>%group_by(Treat,milk_level,Material)%>%summarise(mean_rep=sum(DT),count=n())
+
+fe<-data.frame(A=c(-1,1,-1,1),B=c(-1,-1,1,1),AB=c(1,-1,-1,1)) #contrast of Factorial effects
+
+L<-colSums(fe*mr$mean_rep)/2
+ss<-((L/2))/6
+a<-rbind(L,ss)
+cat("Factorial Effects:","\n")
+print(a)
+```
+
+
+```{r}
+Volume <- c(260, 270, 260, 260,
+            180 ,230 ,190 ,210,
+            300, 270, 280, 310,
+            190,150 ,150 , 160)
+A <- factor(rep(c(rep("low",4),rep("high",4)),2))
+B <- factor(c(rep("low",8),rep("high",8)))
+C <- factor(rep(c(rep(1,2),rep(2,2)),4))
+
+# Main factorial effect A "by hand":
+means   <- c( mean(Volume[1:4]),  mean(Volume[5:8]),
+              mean(Volume[9:12]), mean(Volume[13:16]) )
+lambda  <- 1/2*c(-1,1,-1,1)
+cat("Factorial effect A (by hand) = ",lambda%*%means,"\n\n")
+
+# Fit model without three-way interaction:
+fit <- aov(Volume ~ A*B+A*C+B*C)
+summary(fit)
+
+```
+
+
+```{r}
+
+# Check assumptions:
+resid  <- residuals(fit)
+fitted <- fitted.values(fit)
+opar   <- par(mfrow = c(1,2))         
+plot(fitted, resid, main = "Residuals v. Fitted Values",pch=19,
+     cex=1.2,col="blue")
+qqnorm(resid, main = "Normal Q-Q Plot",pch=19, col="blue",cex=1.2,
+       xlab = "Theoretical Quantiles",
+       ylab = "Sample Quantiles", plot.it = TRUE)
+qqline(resid,lwd=1.2)
+par(opar)
+
+# ANOVA:
+anova <- summary(fit)
+print(anova)
+print(coef(summary.lm(fit)))
+
+# SE factorial effect A given current model:
+se.anova   <- coef(summary.lm(fit))[2,2]
+se.effectA <- sqrt( 4*se.anova^2 )
+cat("\nSE factorial effect A (using aov) =  ",se.effectA,"\n")
+
+# SE factorial effect "by hand":
+sigma2 <- anova[[1]][7,3]
+# Factorial A is a contrast of treatment
+# means, or 1/r X L, with L a contrast of 
+# treatment totals. For L, variance is
+# derived in Section 2.6
+r <- 4
+D <- r*sum(lambda^2)
+se.effect <- sqrt( 1/r^2*sigma2*D )
+cat("SE factorial effect A (by hand) =  ",se.effect,"\n")
+```
+

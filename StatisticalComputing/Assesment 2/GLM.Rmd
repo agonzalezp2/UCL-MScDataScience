@@ -1,0 +1,323 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+#0. Aim
+Your overall goal is to build a (generalised) linear model and an advanced regression model to predict given the available covariates, and to compare whether one is signicantly UNITS better at predicting the response than the other.
+
+```{r packages include  = FALSE}
+library(ggplot2)
+library(tidyverse)
+library(lubridate)
+```
+
+  
+```{r include  = FALSE}
+str(dta)
+```
+
+
+#1. Preprosesing data
+
+#2. Data Exploration
+
+#3. Generalized Linear Model
+Find a linear model or generalised linear model (i.e., one using lm() or glm(), refer to Lab 6) that enables UNITS to be predicted from the other variables and that is not more complicated than necessary. You may wish to consider using log transformations of one or more of the explanatory variables or of the response variable and to consider interactions between variables. You should consider a wide enough range of models to make your choice of model convincing and use appropriate diagnostics to assess them. But ultimately you are required to recommend a single lm() or glm() model that is suitable for use (in the grocery retail industry, for example) and to justify your recommendation.
+
+##3.1. Previous defintions
+As the values of the ouptut variable, UNIT, is a positive intergers, nevertheless in the point of view of modelation it can be also considered as real positive. Therefore in this study we will ran differnt models of GLM that bellos to the families of poisson, quasipoisson and gaussian. The link function that were tested are:"log" and "indentity"
+
+The models will not consider for the fitting the varaibles: 
+
+```{r elmination of outlier, warning=FALSE, include=FALSE}
+dta_GLM<-dta
+dta_GLM$logUnits<-log(dta$UNITS)
+dta_GLM<-dta_GLM[c(-5724,-9346,-5004,-2981,-8276,-6687,-82730,-5553,-2483,-2983,-8271,-2633,-9414,-8618,-2632),]
+Deviance<-NULL
+AICs<-NULL
+Model_Name<-NULL
+```
+
+```{r poissonfull}
+fit.pois0<-glm(formula= UNITS~ BASE_PRICE+PRICE+UPC*DISCOUNT+STORE_GROUP+ WEEK_YEAR+TPR_ONLY+FEATURE*DISPLAY+DISPLAY*DISCOUNT, family = poisson(link = "log"), data = dta_GLM)
+
+#Analisis part. commented to run it faster
+#summary(fit.pois0, correlation = FALSE)
+#anova(fit.pois0, test ="Chi") # as we know the dispersion paramter we use Chi
+#drop1(fit.pois0)
+#par(mfrow = c(2, 2))
+#plot(fit.pois0)
+
+#Save data
+Deviance[1]<-fit.pois0$deviance
+AICs[1]<-AIC(fit.pois0)
+Model_Name[1]<-"GLM Poisson Full Model"
+```
+
+Then, using the ‘drop1()’ command news models were generated with less variables that the original one. 
+
+```{r poission-UPC models, include=FALSE}
+fit.pois1<-glm(formula= UNITS~ PRICE+UPC*DISCOUNT+STORE_GROUP+ WEEK_YEAR+DISPLAY , family = poisson(link = "log"), data = dta_GLM)
+
+#Analisis part. commented to run it faster
+#summary(fit.pois1, correlation = FALSE)
+#anova(fit.pois1, test ="Chi") # as we know the dispersion paramter we use Chi
+#drop1(fit.pois1)
+#par(mfrow = c(2, 2))
+#plot(fit.pois1)
+
+#Save data
+Deviance[2]<-fit.pois1$deviance
+AICs[2]<-AIC(fit.pois1)
+Model_Name[2]<-"GLM Poisson-6variables"
+```
+
+```{r poission-MANUFACTURER  models, include=FALSE}
+fit.pois2<-glm(formula= UNITS~ PRICE+UPC+STORE_GROUP+ WEEK_YEAR+DISPLAY,
+               family = poisson(link = "log"), data = dta_GLM)
+
+#Analisis part. commented to run it faster
+#summary(fit.pois2, correlation = FALSE)
+#anova(fit.pois2, test ="Chi") # as we know the dispersion paramter we use Chi
+#drop1(fit.pois2)
+#plot(fit.pois2)
+
+#Save data
+Deviance[3]<-fit.pois2$deviance
+AICs[3]<-AIC(fit.pois2)
+Model_Name[3]<-"GLM Poisson-5variables"
+```
+
+
+```{r}
+anova(fit.pois0, fit.pois1, test ="Chi")
+anova(fit.pois1, fit.pois2, test ="Chi")
+```
+
+```{r}
+AIC(fit.pois1)
+AIC(fit.pois2)
+```
+#2. Quasipoisson
+
+```{r}
+library(AER)
+dispersiontest(fit.pois0)
+```
+
+```{r Quasy-poissonFull}
+fit.quapois0<-glm(formula= UNITS~ BASE_PRICE+PRICE+UPC*DISCOUNT+STORE_GROUP+WEEK_YEAR+TPR_ONLY+FEATURE*DISPLAY+DISPLAY*DISCOUNT, 
+               family = quasipoisson(link = "log"), data = dta_GLM)
+#Analisis
+#summary(fit.quapois0, correlation = FALSE)
+#anova(fit.quapois0, test ="F") # as we know the dispersion paramter we use Chi
+#drop1(fit.quapois0)7#
+#plot(fit.quapois0)
+
+#Save data
+Deviance[4]<-fit.quapois0$deviance
+AICs[4]<-AIC(fit.quapois0)
+Model_Name[4]<-"GLM quasipoisson Full Model"
+```
+
+```{r Quasy-poisson1}
+fit.quapois1<-glm(formula= UNITS~ PRICE+UPC+DISCOUNT+STORE_GROUP+WEEK_YEAR+FEATURE+DISPLAY, 
+               family = quasipoisson(link = "log"), data = dta_GLM)
+#Analisis
+#summary(fit.quapois1, correlation = FALSE)
+#anova(fit.quapois1, test ="F") # as we know the dispersion paramter we use Chi
+#drop1(fit.quapois1)
+#plot(fit.quapois1)
+
+#Save data
+Deviance[5]<-fit.quapois1$deviance
+AICs[5]<-AIC(fit.quapois1)
+Model_Name[5]<-"GLM quasipoisson-7 varaibles"
+```
+
+```{r Quasy-poisson2}
+fit.quapois2<-glm(formula= UNITS~ PRICE+UPC+STORE_GROUP+WEEK_YEAR+DISPLAY, 
+               family = quasipoisson(link = "log"), data = dta_GLM)
+#Analisis
+#summary(fit.quapois2, correlation = FALSE)
+#anova(fit.quapois2, test ="F") # as we know the dispersion paramter we use Chi
+#drop1(fit.quapois2)
+
+#Save data
+Deviance[6]<-fit.quapois2$deviance
+AICs[6]<-AIC(fit.quapois2)
+Model_Name[6]<-"GLM quasipoisson-5 variables"
+```
+
+```{r}
+AIC(fit.quapois2)
+```
+
+#3.Gaussian
+
+```{r gaussianFull Model, include=FALSE}
+fit.gaussian0<-glm(formula= UNITS~  BASE_PRICE+PRICE+UPC*DISCOUNT+STORE_GROUP+WEEK_YEAR+TPR_ONLY+FEATURE*DISPLAY+DISPLAY*DISCOUNT, 
+               family = gaussian(link = "log"), data = dta_GLM)
+#Analisis
+#summary(fit.quapois0, correlation = FALSE)
+#anova(fit.gaussian0, test ="Chi") # as we know the dispersion paramter we use Chi
+#drop1(fit.gaussian0)
+#plot(fit.gaussian0)
+
+#Save data
+Deviance[7]<-fit.gaussian0$deviance
+AICs[7]<-AIC(fit.gaussian0)
+Model_Name[7]<-"GLM Gaussian-Full Model"
+```
+
+```{r Gaussian Model1, include=FALSE}
+fit.gaussian1<-glm(formula= UNITS~PRICE+UPC+DISCOUNT+STORE_GROUP+WEEK_YEAR+TPR_ONLY+DISPLAY, 
+               family = gaussian(link = "log"), data = dta_GLM)
+#Analisis
+#summary(fit.quapois0, correlation = FALSE)
+#anova(fit.gaussian1, test ="Chi") # as we know the dispersion paramter we use Chi
+#drop1(fit.gaussian1)
+#plot(fit.gaussian1)
+
+#Save data
+Deviance[8]<-fit.gaussian1$deviance
+AICs[8]<-AIC(fit.gaussian1)
+Model_Name[8]<-"GLM Gaussian-7 variables"
+```
+
+
+```{r Gaussian Model2, include=FALSE}
+fit.gaussian1<-glm(formula= UNITS~PRICE+UPC+STORE_GROUP+WEEK_YEAR+DISPLAY, 
+               family = gaussian(link = "log"), data = dta_GLM)
+#Analisis
+#summary(fit.quapois0, correlation = FALSE)
+#anova(fit.gaussian1, test ="Chi") # as we know the dispersion paramter we use Chi
+#drop1(fit.gaussian1)
+#plot(fit.gaussian1)
+
+#Save data
+Deviance[9]<-fit.gaussian1$deviance
+AICs[9]<-AIC(fit.gaussian1)
+Model_Name[9]<-"GLM Gaussian-5 variables"
+```
+#3.2 Analisis
+```{r AdvRegAnalysis, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+GLM_results<-data.frame(Deviance,AICs)
+row.names(GLM_results)<-Model_Name
+GLM_results
+```
+
+#3.3 staring over
+
+
+```{r elmination of outlier, warning=FALSE, include=FALSE}
+dta_GLM<-dta
+dta_GLM$logUnits<-log(dta$UNITS)
+dta_GLM<-dta_GLM[c(-5724,-9346,-5004,-2981,-8276,-6687,-82730,-5553,-2483,-2983,-8271,-2633),]
+Deviance<-NULL
+AICs<-NULL
+Model_Name<-NULL
+```
+
+```{r poissonfull}
+fit.pois0<-glm(formula= UNITS~ BASE_PRICE+PRICE+UPC*DISCOUNT+STORE_GROUP+ WEEK_YEAR+TPR_ONLY+FEATURE*DISPLAY+DISPLAY*DISCOUNT, family = poisson(link = "log"), data = dta_GLM)
+
+#Analisis part. commented to run it faster
+#summary(fit.pois0, correlation = FALSE)
+anova(fit.pois0, test ="Chi") # as we know the dispersion paramter we use Chi
+#drop1(fit.pois0)
+#par(mfrow = c(2, 2))
+plot(fit.pois0)
+
+#Save data
+#Deviance[1]<-fit.pois0$deviance
+#AICs[1]<-AIC(fit.pois0)
+#Model_Name[1]<-"GLM Poisson Full Model"
+```
+
+
+```{r Quasy-poissonFull}
+fit.quapois0<-glm(formula= UNITS~ BASE_PRICE+PRICE+UPC*DISCOUNT+STORE_GROUP+WEEK_YEAR+TPR_ONLY+FEATURE*DISPLAY+DISPLAY*DISCOUNT, 
+               family = quasipoisson(link = "log"), data = dta_GLM)
+#Analisis
+summary(fit.quapois0, correlation = FALSE)
+anova(fit.quapois0, test ="F") # as we know the dispersion paramter we use Chi
+#drop1(fit.quapois0)7#
+plot(fit.quapois0)
+
+#Save data
+#Deviance[4]<-fit.quapois0$deviance
+#AICs[4]<-AIC(fit.quapois0)
+#Model_Name[4]<-"GLM quasipoisson Full Model"
+```
+
+
+```{r gaussianFull Model, include=FALSE}
+fit.gaussian0<-glm(formula= UNITS~  BASE_PRICE+PRICE+UPC*DISCOUNT+STORE_GROUP+WEEK_YEAR+TPR_ONLY+FEATURE*DISPLAY+DISPLAY*DISCOUNT, 
+               family = gaussian(link = "log"), data = dta_GLM)
+#Analisis
+summary(fit.quapois0, correlation = FALSE)
+anova(fit.gaussian0, test ="Chi") # as we know the dispersion paramter we use Chi
+#drop1(fit.gaussian0)
+plot(fit.gaussian0)
+
+#Save data
+#Deviance[7]<-fit.gaussian0$deviance
+#AICs[7]<-AIC(fit.gaussian0)
+#Model_Name[7]<-"GLM Gaussian-Full Model"
+```
+
+```{r NEgativebinomial Model}
+
+library(MASS)
+
+negbin_model <- glm.nb(UNITS~  BASE_PRICE+PRICE+UPC+DISCOUNT+STORE_GROUP+WEEK_YEAR+TPR_ONLY+FEATURE*DISPLAY+DISPLAY*DISCOUNT, data = dta_GLM)
+
+#Analisis
+summary(negbin_model)
+anova(negbin_model, test ="Chi") # as we know the dispersion paramter we use Chi
+drop1(negbin_model)
+plot(negbin_model)
+
+#Save data
+#Deviance[7]<-fit.gaussian0$deviance
+#AICs[7]<-AIC(fit.gaussian0)
+#Model_Name[7]<-"GLM Gaussian-Full Model"
+```
+
+
+```{r NEgativebinomial Model}
+
+negbin_model <- glm.nb(UNITS~ PRICE+UPC*DISCOUNT+STORE_GROUP+ WEEK_YEAR+DISPLAY, data = dta_GLM)
+
+#Analisis
+summary(negbin_model)
+anova(negbin_model, test ="F") # as we dont know the dispersion paramter we use F
+drop1(negbin_model)
+plot(negbin_model)
+
+#Save data
+#Deviance[7]<-fit.gaussian0$deviance
+#AICs[7]<-AIC(fit.gaussian0)
+#Model_Name[7]<-"GLM Gaussian-Full Model"
+```
+
+
+
+
+```{r NEgativebinomial Model}
+
+negbin_model <- glm.nb(UNITS~ PRICE+UPC+STORE_GROUP+ WEEK_YEAR+DISPLAY, data = dta_GLM)
+
+#Analisis
+#summary(negbin_model)
+anova(negbin_model, test ="F") # as we dont know the dispersion paramter we use F
+drop1(negbin_model)
+plot(negbin_model)
+
+#Save data
+#Deviance[7]<-fit.gaussian0$deviance
+#AICs[7]<-AIC(fit.gaussian0)
+#Model_Name[7]<-"GLM Gaussian-Full Model"
+```
+

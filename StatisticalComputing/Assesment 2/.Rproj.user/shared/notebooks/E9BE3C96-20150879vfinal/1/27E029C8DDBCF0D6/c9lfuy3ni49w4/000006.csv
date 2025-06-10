@@ -1,0 +1,11 @@
+"0","dta_week<-dta"
+"0","dta_week$DATE<-as.Date(dta$WEEK_END_DATE,origin='1899-12-27')"
+"0","dta_week$week_n<-as.factor(week(dta_week$DATE))"
+"0","dta_week$year<-as.factor(year(dta_week$DATE))"
+"0","dta_week2<-dta_week%>%group_by(week_n,year)%>%summarise(sum_UNITS=sum(UNITS),avg_PRICE=sum(PRICE*UNITS)/sum(UNITS),avg_BASE_PRICE=sum(BASE_PRICE*UNITS)/sum(UNITS), avg_DISCOUNT=sum(DISCOUNT*UNITS)/sum(UNITS), Utility = sum(PRICE*UNITS))"
+"2","`summarise()` regrouping output by 'week_n' (override with `.groups` argument)
+"
+"0","ggplot(data=dta_week2, aes(x=week_n, y=avg_PRICE,group=year, colour=year)) +"
+"0","  geom_line() + theme(axis.text.x = element_text(angle=90))+ "
+"0","  ggtitle("" average sales per week of the year"")"
+"0",""

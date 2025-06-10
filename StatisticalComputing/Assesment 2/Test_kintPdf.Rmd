@@ -1,0 +1,191 @@
+---
+title: "test"
+author: "ag"
+date: "24/02/2021"
+output: pdf_document
+---
+# 1. Introduction
+```{r packages, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(lubridate)
+
+library(car)
+library(MASS)
+
+library(randomForest)
+library(xgboost)
+library(fastDummies)
+
+```
+
+Under a framework of Marketing Mix, sales are related the four P, that can be realted with factors given in the data: Price (PRICE_BASE, PRICE), Position(STORE_NUM, DATE),PRODUCT (UPC, BRAND) and Promotion (DISPLAY, FEATURE, TPR_ONLY). In this study we will consserder this relations.
+
+# 2. Data exploration
+```{r dta_gen, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+dta<-as.tibble(read.csv("grocery.csv", header = TRUE))
+
+dta$STORE_NUM<-as.factor(dta$STORE_NUM)
+dta$UPC<-as.factor(dta$UPC)
+dta$MANUFACTURER<-as.factor(dta$MANUFACTURER)
+dta$DISPLAY<-as.factor(dta$DISPLAY)
+dta$FEATURE<-as.factor(dta$FEATURE)
+dta$TPR_ONLY<-as.factor(dta$TPR_ONLY)
+dta$UNITS<-as.double(dta$UNITS)
+dta$BASE_PRICE<-as.double(dta$BASE_PRICE)
+dta$PRICE<-as.double(dta$PRICE)
+```
+
+```{r corr, echo=FALSE}
+pairs(dta[,c(10,1,2,3)],col=dta$MANUFACTURER, main="Pairwise Scatter Plots") # corr of quantitatives varibles
+```
+
+The varibles BASE_PRICE and PRICE, are higly correlateed ($\rho=0.85$). to solve this, it was created the varible DISCOUNT $(PRICE-BASE\_PRICE)/BASE\_PRICE$ ($\rho=-0.25$)
+
+```{r solvingCorrelation, include = FALSE}
+cat("PRICE-BASE_price correlation is:", cor(dta$BASE_PRICE,dta$PRICE))
+dta$DISCOUNT<- -(dta$PRICE-dta$BASE_PRICE)/dta$BASE_PRICE
+cat("\n","DISCOUNT-BASE_price correlation is:", cor(dta$BASE_PRICE,dta$DISCOUNT))
+```
+ 
+
+The graph bellow shows the distribution of the prices of the products. We can see that the brand have clear markets position. "Private Label" is cheaper than the rest, but doesn't work with  discouts, moreover sometimes there are sales with prices avobe the base price. On the other hand, the other three manufacurer are more expensives and do work with discounts, with the exception of TOMBSTONE. This is suggestig that the brand might have an iteraction effect with discount.
+
+```{r Products, include = FALSE}
+p1<-ggplot(data=dta, aes(x=UPC, y=PRICE)) + geom_boxplot(aes(colour=MANUFACTURER)) + theme(legend.position = "top") +coord_flip()
+p2<-ggplot(data=dta, aes(x=UPC, y=DISCOUNT)) + geom_boxplot(aes(colour=MANUFACTURER)) + theme(legend.position = "none") +coord_flip()+
+  theme(axis.title.y=element_blank(),axis.text.y=element_blank())
+p3<-ggplot(data=dta, aes(x=UPC, y=UNITS)) + geom_boxplot(aes(colour=MANUFACTURER))+ theme(legend.position = "none") +coord_flip() +
+  theme(axis.title.y=element_blank(),axis.text.y=element_blank())
+
+legend <- cowplot::get_legend(p1) # takes teh legend form plot1
+
+grid.arrange(p1+theme(legend.position = "none"), p2, p3, legend,
+              ncol=3, nrow = 2,
+             layout_matrix = rbind(c(1,2,3), c(4,4,4)),
+             widths = c(3.7, 2.5,2.5), heights = c(2.5,0.2),
+             top="Distribution of Prices and Sales by UPC"
+             )
+```
+
+Other analysis and graphs were run to get better insigth of the data. For instance, it was investigated the seasonality of the market, to find trends over the years and also to analyse the averge sales per month of the sores in order to create new variables that allows to group the information and increase the generalization power of the models. As this it were created new two variables:
+* WEEK_YEAR: agrupation of WEEK_END_DATE  per number of the week of the year. This is inspiere in the graph bellow.
+* STORE_GROUP: agrupation of the stores per average sales per month. This agrupation is shown in the graph bellow.
+
+```{r GroupStores, message=FALSE, warning=FALSE, include=FALSE}
+#lets gorup the data of the stores
+dta_store<-dta%>%group_by(STORE_NUM,WEEK_END_DATE)%>%
+  summarise(Total_Week_Sale= sum(UNITS))%>%
+  group_by(STORE_NUM)%>%
+  summarise(Avg_Week_Sale=mean(Total_Week_Sale),
+            Total_Sale=sum(Total_Week_Sale))
+
+#lets create  table of frequencies to analyse it
+bins<-seq((min(dta_store$Avg_Week_Sale)-0.01),max(dta_store$Avg_Week_Sale),length.out=30)# create bins
+frec_table_store <- dta_store %>% mutate(bin = cut(Avg_Week_Sale,bins), right = FALSE) # add bins to frec
+frec_table_store<-group_by(frec_table_store, bin) %>% 
+  summarise(observed = n(), Total_SALE=sum(Total_Sale),per_frec=n()/nrow(dta_store))# group x by bins
+frec_table_store$lower = as.numeric( sub("\\((.+),.*", "\\1", frec_table_store$bin) )# add bins labels
+frec_table_store$upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", frec_table_store$bin))# add bins labels
+
+frec_acum<-rep(0,nrow(frec_table_store))
+j=0
+for (i in 1:nrow(frec_table_store)){
+  j=j+frec_table_store$per_frec[i]
+  frec_acum[i]=j
+}
+frec_table_store<-cbind(frec_table_store,frec_acum)
+
+#lets create our groupping table of stores
+cuts<-c(1:9)/10#lets create the following cuts in %
+limits<-rep(0,length(cuts))
+for (i in 1:length(cuts)) {
+  aux<-frec_table_store$frec_acum<cuts[i]
+  limits[i]<-max(frec_table_store$upper[aux])
+}
+limits<-c(0,limits)
+
+STORE_GROUP<-rep(length(limits),nrow(dta_store))
+for (i in 1:nrow(dta_store)) {
+  for (j in length(limits):1) {
+    if (dta_store$Avg_Week_Sale[i]>=limits[j]){
+      STORE_GROUP[i]<-j
+      break
+    }
+  }
+}
+dta_store<-cbind(dta_store,STORE_GROUP)
+dta_store$STORE_GROUP<-as.factor(dta_store$STORE_GROUP)
+dta_store
+
+dta<-dta%>%left_join(dta_store,by="STORE_NUM")%>% dplyr::select(BASE_PRICE, PRICE, WEEK_END_DATE, STORE_NUM, UPC, MANUFACTURER, DISPLAY, FEATURE, TPR_ONLY, UNITS, DISCOUNT, STORE_GROUP) 
+
+hist1<-ggplot(dta_store, aes(x = Avg_Week_Sale)) +
+  geom_histogram(aes(fill=STORE_GROUP),bins=30)+
+  ggtitle("Store agrupation per week sale")+
+  theme(legend.position = "top")
+```
+
+```{r a_brief_story_of_time, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+dta_week<-dta
+dta_week$DATE<-as.Date(dta$WEEK_END_DATE,origin='1899-12-27')
+dta_week$week_n<-as.factor(week(dta_week$DATE))
+dta$WEEK_YEAR<-dta_week$week_n
+
+dta_week$year<-as.factor(year(dta_week$DATE))
+dta_week<-dta_week%>%group_by(week_n,year)%>%summarise(sum_UNITS=sum(UNITS),avg_PRICE=sum(PRICE*UNITS)/sum(UNITS),avg_BASE_PRICE=sum(BASE_PRICE*UNITS)/sum(UNITS), avg_DISCOUNT=sum(DISCOUNT*UNITS)/sum(UNITS), Utility = sum(PRICE*UNITS))
+
+time_ser<- ggplot(data=dta_week, aes(x=week_n, y=sum_UNITS,group=year, colour=year)) +
+  geom_line() + theme(axis.text.x = element_text(angle=90))+ 
+  ggtitle("Average sales per week of the year")+
+  theme(legend.position = "top")
+
+```
+
+
+```{r}
+grid.arrange(time_ser,hist1, nrow=1)
+
+#dta<-dta%>% dplyr::select(BASE_PRICE, PRICE, WEEK_END_DATE, STORE_NUM, UPC, MANUFACTURER, DISPLAY, FEATURE, TPR_ONLY, UNITS, DISCOUNT, STORE_GROUP,WEEK_YEAR) 
+```
+# 3. Looking for the best GLM and Advanced Regression Models 
+## 3.1. GLM Models
+
+In this section it is shown the analysis done to fit several general Linear Models for predict the the output variable, UNITS. Units is in the positive integers, but due to the nature of the problem, it can also be considered as if they were the real positives. Therefore, in this study it was considered different models of GLM form the families of Poissons, Quasipoisson and Gaussian. And the link function used were used are: "log" and "identity". 
+
+First, analising the output variable, we can see in the following histograms the distribution of UNITS and LOG(UNITS), and the qqplots of log(UNITS) compared with a poisson and a normal distribution. Supporting the idea that UNITS follows a Poisson distribution, with desviations int the tails, and that the link funtion log is a good idea. 
+
+```{r}
+hist2<-ggplot(dta, aes(x=UNITS)) + 
+  geom_histogram(aes(y=..density..),binwidth = 3,color="black", fill="white")+
+  geom_vline(aes(xintercept=mean(UNITS)), color="blue", linetype="dashed", size=1)+
+  geom_density(alpha=.2, fill="#FF6666") +
+  ggtitle("UNITS Distribution Density")
+
+hist3<-ggplot(dta, aes(x=log(UNITS))) + 
+  geom_histogram(aes(y=..density..),binwidth = 0.33,color="black", fill="white")+
+  geom_vline(aes(xintercept=mean(log(UNITS))), color="blue", linetype="dashed", size=1)+
+  geom_density(alpha=.2, fill="#FF6666") +
+  ggtitle("Distribution Density of log(UNITS)")
+
+grid.arrange(hist2,hist3, nrow=1)
+
+par(mfrow=c(1,2))
+qqPlot(log(dta$UNITS), distribution = "pois", lambda = mean((dta$UNITS)), main="Poisson Q-Q Plot", ylab = "log(UNITS)")
+qqnorm(log(dta$UNITS))
+qqline(log(dta$UNITS))
+
+```
+
+### 3.1.1. Generating the best models for each family
+The strategy to find the models was to fit a first model that considers multiples regressors and interaction terms. The combinations of those regressor were based on the theorical effects of the Marketing Mix 4P: Product, Price, Place and Promotion. Then for each model considered was deeply analysed and the best model was choosen relating to the fulfilment of the model assumptions by performing variables transformation and eliminating outliers. 
+
+The assumptions to be proven are:
+
+- **Homogeneity of error variance**. For gaussian linear models we analyse the plots ‘Residuas vs Fitted’ and ‘Predicted Values vs Pearson residuals’, we look that the trend red line to be as parallel as possible and to see an scatter of residual. Nevertheless since UNITS probably comes form a Poisson distribution (see test in data exploration section). So the errors can’t be negative when the model predicts a zero value, so it’s normal to see the negative errors variance growing with a “cap". Additionally, since the models considers a log link function it would be ok to see some logarithmic patterns, if the overall trend is constant.
+
+- **gaussian distribution of residuals**. The QQ plot it’s not mandatory need to be a gaussian if we are assuming that the data comes form a Poisson distribution.
+
+The next graph shows an example of the main case for a poisson distribution.

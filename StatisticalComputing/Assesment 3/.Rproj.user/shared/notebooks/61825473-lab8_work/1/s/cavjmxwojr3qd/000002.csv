@@ -1,0 +1,3 @@
+"0","dta<-read.csv(\"../data/ObesityData.csv\")
+dta<-tibble(dta)
+summary(dta)"

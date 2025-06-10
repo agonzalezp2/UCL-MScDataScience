@@ -1,0 +1,4 @@
+"0","selectedModel<-5"
+"0","dta_use<-dta_boos[,ModelColnames[[selectedModel]]]"
+"2","Error: object 'dta_boos' not found
+"

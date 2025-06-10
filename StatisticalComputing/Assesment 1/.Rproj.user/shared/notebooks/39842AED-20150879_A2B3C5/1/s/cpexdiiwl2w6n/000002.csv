@@ -1,0 +1,5 @@
+"0","#3. Produce a Quantile-Quantile plot with reference to a normal distribution. "
+"0",""
+"0","# Plot Q-Q plot for a theorical normal distribution. "
+"0","# The first parameter is our data that we intend to compare it with."
+"0","qqnorm(t_fail)"

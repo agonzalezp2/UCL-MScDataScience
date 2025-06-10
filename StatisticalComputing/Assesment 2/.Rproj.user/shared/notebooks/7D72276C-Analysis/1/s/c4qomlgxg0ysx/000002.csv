@@ -1,0 +1,3 @@
+"0","par(mfrow=c(1,3))"
+"0","boxplot(DT~Material, data=DB, ylab=""Temperature Reduction (°C)"","
+"0","xlab=""material"")"

@@ -1,0 +1,5 @@
+"0","dta_boos<- dummy_cols(dta,c(""UPC"",""MANUFACTURER"", ""STORE_GROUP"",""WEEK_YEAR""))"
+"0","dta_boos<- dta_boos%>%select(-UPC,-STORE_NUM,-MANUFACTURER,-WEEK_YEAR,-UNITS,-STORE_GROUP,-WEEK_END_DATE)"
+"2","Error in select(., -UPC, -STORE_NUM, -MANUFACTURER, -WEEK_YEAR, -UNITS,  : 
+  unused arguments (-UPC, -STORE_NUM, -MANUFACTURER, -WEEK_YEAR, -UNITS, -STORE_GROUP, -WEEK_END_DATE)
+"

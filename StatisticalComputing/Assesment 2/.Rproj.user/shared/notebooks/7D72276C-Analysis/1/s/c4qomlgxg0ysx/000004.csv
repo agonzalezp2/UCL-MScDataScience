@@ -1,0 +1,2 @@
+"0","boxplot(DT~milk_level,data=DB, ylab="""","
+"0","xlab=""Milk Level"")"

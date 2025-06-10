@@ -1,0 +1,4 @@
+"0",""
+"0","pair<-ggpairs(data=data, columns = c(1:7,10,11,9),"
+"0","              ggplot2::aes(colour=kind))"
+"0","pair"

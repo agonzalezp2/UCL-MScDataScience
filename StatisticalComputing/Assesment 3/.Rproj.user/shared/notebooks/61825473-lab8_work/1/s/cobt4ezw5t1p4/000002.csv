@@ -1,0 +1,9 @@
+"0","clus_dta<-dta%>% group_by(UA, Region)%>%
+  summarise(avg_PA=mean(PupilAbs), avg_Off=mean(VOffenceRate), avg_EFR =mean(ElderlyFallRate), avgFP=mean(FuelPoverty), avg_WD=mean(WinterDeaths), avg_SOFR=mean(SOffenceRate), avg_U18P=mean(Under18Pcnt), avg_64P =mean(Over64Pcnt), avg_EIR=mean(EconInactRate), avg_p=mean(Pollution), avg_HA=mean(HomeAfford), avg_GP=mean(GenderPayGap), avg_E=mean(Earnings))
+
+cat(\"number of UAs groupped:\",nrow(clus_dta), \"number of features aveaged:\",ncol(clus_dta) )
+
+hcl <- hclust(dist(clus_dta))
+
+plot(hcl)
+abline(h = 3.9, col = \"red\")"

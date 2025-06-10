@@ -1,0 +1,2 @@
+"0","fit.pois2<-glm(formula= UNITS~ BASE_PRICE*DISCOUNT + STORE_NUM*DISPLAY*week_n + log (WEEK_END_DATE) ,"
+"0","               family = poisson(link = ""log""), data = dta_week)"

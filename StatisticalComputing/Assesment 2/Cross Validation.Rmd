@@ -1,0 +1,53 @@
+---
+title: "Cross Validation"
+author: "ag"
+date: "22/02/2021"
+output: html_document
+---
+
+```{r}
+selectedModel<-5
+dta_use<-dta_boos[,ModelColnames[[selectedModel]]]
+
+#find the best paramters
+best_paramers<-params[[selectedModel]]# loading parameters
+best_md<-best_paramers[1]
+best_nrounds<-best_paramers[2]
+```
+
+```{r}
+n <- nrow(dta)
+k <- 10 # Number of folds
+fold_idx <- sample(cut(1:n, breaks = k, labels = FALSE)) # randomly selecting lines
+
+RMSE_errors <- matrix(-1, nrow = k, ncol = 2)
+
+for (j in 1:k) {
+  
+  # Get the k-th partition
+  test_idx <- which(fold_idx == j)
+  #train_set <- dta[-test_idx, ]
+  test_set <- dta[test_idx, ]
+  
+  # Train and test the model
+  #preidcition
+  
+  glm.model <- glm.nb(UNITS~ PRICE+UPC+STORE_GROUP+ WEEK_YEAR+DISPLAY, data = dta[-test_idx,])
+  y_hat <- predict(glm.model, dta[test_idx,])
+  RMSE_errors[j,1] <- (mean((test_set$UNITS - y_hat)^2))^(1/2) 
+  
+  adv.model <- model <- xgboost(data = as.matrix(dta_use[-test_idx, ]), 
+                      label = dta$UNITS[-test_idx], 
+                      nrounds = best_nrounds, max_depth = best_md, verbose = FALSE)
+  y_hat <- predict(adv.model, as.matrix(dta_use[test_idx,]))
+  
+  RMSE_errors[j,2] <- (mean((y_hat - dta$UNITS[test_idx])^2))^(1/2) 
+    
+  
+}
+
+colnames(RMSE_errors)<-c("glm","advReg")
+RMSE_errors
+t.test(RMSE_errors[,1],RMSE_errors[,2],paired=TRUE)
+```
+

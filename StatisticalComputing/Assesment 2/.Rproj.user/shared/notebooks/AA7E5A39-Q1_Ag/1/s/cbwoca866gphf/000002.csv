@@ -1,0 +1,7 @@
+"0","Q1_theme <- theme("
+"0"," plot.title=element_text(face=""bold.italic"", size=""18"", color=""brown""),"
+"0"," axis.title=element_text(face=""bold.italic"",size=12, color=""brown""),axis.text=element_text(face=""bold"", size=11,color=""black""),"
+"0"," panel.background=element_rect(fill=""white"",color=""grey"",size=4),panel.grid.major.y=element_line(color=""grey"",linetype=1),"
+"0"," panel.grid.minor.y=element_line(color=""grey"",linetype=2),"
+"0"," panel.grid.minor.x=element_blank(),legend.position=""top"") "
+"0",""

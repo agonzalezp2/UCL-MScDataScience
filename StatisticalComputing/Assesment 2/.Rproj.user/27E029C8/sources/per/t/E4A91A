@@ -1,0 +1,26 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1614006371749.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "804314717",
+    "id" : "E4A91A",
+    "lastKnownWriteTime" : 1607226646,
+    "last_content_update" : 1607226646,
+    "path" : "D:/OneDrive/Documents/1. Estudios/UCL - Data Science MSc/5. STAT032 - Intro Stat Data Science/Group Project/Codes/Q1/Q1_Ag.Rmd",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "292,0",
+        "last_setup_crc32" : "",
+        "scrollLine" : "0"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 7,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

@@ -1,0 +1,29 @@
+"0","#summary(data)"
+"0","df<-data %>% group_by(kind) %>%"
+"0","  select(fixed.acidity, volatile.acidity, citric.acid, residual.sugar, chlorides, free.sulfur.dioxide, total.sulfur.dioxide, density, pH, sulphates, alcohol, quality) %>% "
+"0","  summarise_each(funs(min = min, max = max, mean = mean,sd = sd)) %>% "
+"0","  pivot_longer(-kind, names_to = ""key"", values_to = ""value"") %>%"
+"0","  separate(key, into = c(""Attribute"", ""stat""), sep = ""_"") %>%"
+"0","  pivot_wider(names_from = c(stat, kind), values_from = value) %>%"
+"0","  #spread(stat, value) %>%"
+"0","  #select(Attribute, min, max, mean, sd) %>%  # reorder columns "
+"0","  print()"
+"2","Adding missing grouping variables: `kind`
+"
+"2","`summarise_each_()` is deprecated as of dplyr 0.7.0.
+Please use `across()` instead.
+[90mThis warning is displayed once every 8 hours.[39m
+[90mCall `lifecycle::last_warnings()` to see where this warning was generated.[39m"
+"2","`funs()` is deprecated as of dplyr 0.8.0.
+Please use a list of either functions or lambdas: 
+
+  # Simple named list: 
+  list(mean = mean, median = median)
+
+  # Auto named with `tibble::lst()`: 
+  tibble::lst(mean, median)
+
+  # Using lambdas
+  list(~ mean(., trim = .2), ~ median(., na.rm = TRUE))
+[90mThis warning is displayed once every 8 hours.[39m
+[90mCall `lifecycle::last_warnings()` to see where this warning was generated.[39m"

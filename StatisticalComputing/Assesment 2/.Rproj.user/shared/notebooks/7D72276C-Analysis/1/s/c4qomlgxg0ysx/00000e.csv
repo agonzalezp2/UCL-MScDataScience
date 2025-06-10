@@ -1,0 +1,4 @@
+"0",""
+"0","interaction.plot(DB$Material , DB$Day_id, DB$DT,"
+"0","ylab="""", xlab=""Material"","
+"0","trace.label=""Day"", cex=0.5, ylim = c(9.7,14.3))"

@@ -1,0 +1,7 @@
+"0","n <- nrow(dta)"
+"0","k <- 10 # Number of folds"
+"0","fold_idx <- sample(cut(1:n, breaks = k, labels = FALSE)) # randomly selecting lines"
+"0",""
+"0","RMSE_errors <- matrix(-, nrow = k, ncol = 2)"
+"2","Error: unexpected ',' in ""RMSE_errors <- matrix(-,""
+"

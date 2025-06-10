@@ -1,0 +1,6 @@
+"0","# Check assumptions:"
+"0","resid  <- residuals(fit_final)"
+"0","fitted <- fitted.values(fit)"
+"0","opar   <- par(mfrow = c(1,2))         "
+"0","plot(fitted, resid, main = ""(a) Residuals v. Fitted Values"",pch=19,"
+"0","     cex=1.2,col=""blue"")"

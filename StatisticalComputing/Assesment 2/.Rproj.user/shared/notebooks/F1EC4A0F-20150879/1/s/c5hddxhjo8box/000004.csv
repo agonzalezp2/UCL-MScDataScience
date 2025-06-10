@@ -1,0 +1,4 @@
+"0","#fitting the random forest"
+"0","fit_rf0 <- randomForest(UNITS ~ .-STORE_NUM-BASE_PRICE-WEEK_END_DATE, data = dta, subset = train_points,importance=TRUE)"
+"2","
+"

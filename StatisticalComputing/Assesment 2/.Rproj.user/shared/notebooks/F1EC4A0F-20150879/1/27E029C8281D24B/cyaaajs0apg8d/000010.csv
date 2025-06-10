@@ -1,0 +1,1 @@
+"0","aov.treat<-aov(UNITS~ Treat * UPC + STORE_NUM * WEEK_END_DATE, data=dta_treat)"

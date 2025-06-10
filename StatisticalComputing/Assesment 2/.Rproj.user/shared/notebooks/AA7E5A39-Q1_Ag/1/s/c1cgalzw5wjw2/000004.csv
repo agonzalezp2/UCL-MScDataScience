@@ -1,0 +1,5 @@
+"0",""
+"0","grid2<-grid.arrange(myhistogram[[1]]+theme(legend.position = ""none""),"
+"0","                    myhistogram[[3]]+ylab("""")+theme(legend.position = ""none""),"
+"0","                    myhistogram[[2]]+ylab("""")+theme(legend.position = ""none""),"
+"0","                    ncol=3)"

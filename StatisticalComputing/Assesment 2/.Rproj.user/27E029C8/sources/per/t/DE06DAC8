@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1614160030494.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "1280489268",
+    "id" : "DE06DAC8",
+    "lastKnownWriteTime" : 1613431881,
+    "last_content_update" : 1613431881,
+    "path" : "D:/OneDrive/Documents/1. Estudios/UCL - Data Science MSc/5. STAT032 - Intro Stat Data Science/Week 5/Slides - week5 Rcode.R",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "231,63",
+        "scrollLine" : "0"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 9,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

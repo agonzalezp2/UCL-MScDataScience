@@ -1,0 +1,7 @@
+"0","time_ser<- ggplot(data=dta_week, aes(x=week_n, y=sum_UNITS,group=year, colour=year)) +
+  geom_line() + theme(axis.text.x = element_text(angle=90))+ 
+  ggtitle(""Average sales per week of the year"")+
+  theme(legend.position = ""top"")+scale_x_discrete(breaks = ID[c(T,F,F)])
+"
+"2","Error in check_breaks_labels(breaks, labels) : object 'ID' not found
+"

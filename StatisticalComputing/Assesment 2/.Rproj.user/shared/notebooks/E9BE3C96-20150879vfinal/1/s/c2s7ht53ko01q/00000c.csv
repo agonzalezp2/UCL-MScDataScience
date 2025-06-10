@@ -1,0 +1,4 @@
+"0",""
+"0","ggplot(data=dta, aes(x=DISCOUNT, y=log(UNITS),group=UPC, colour=UPC)) +"
+"0","  geom_smooth(method = lm)+ "
+"0","  ggtitle("" Discount vs Units"")#+geom_point() "

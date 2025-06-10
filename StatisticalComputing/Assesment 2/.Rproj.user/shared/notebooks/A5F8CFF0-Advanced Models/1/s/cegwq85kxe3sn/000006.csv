@@ -1,0 +1,5 @@
+"0","#Model analysis"
+"0","model<-xgb_opt"
+"0","xgb_importance <- xgb.importance(feature_names = names(dta_boos), "
+"0","                                    model = model)"
+"0","xgb_importance"

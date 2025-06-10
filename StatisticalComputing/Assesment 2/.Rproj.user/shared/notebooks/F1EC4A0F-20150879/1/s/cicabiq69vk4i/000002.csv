@@ -1,0 +1,8 @@
+"0","n <- nrow(dta)"
+"0","train_size <- 8/9 "
+"0","train_points <- sample(1:n,round(train_size*n, digits = 0),replace = FALSE)"
+"0","MSE<-NULL"
+"0","RMSE<-NULL"
+"0","Row_name<-NULL"
+"0","ModelColnames<-list()"
+"0","params<-list()"

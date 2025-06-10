@@ -1,0 +1,167 @@
+---
+title: "20150879 (replace with your own student number)"
+author: "A2, B3, C5 (replace with your allocated questions)"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+# PLEASE LEAVE THIS IS AS
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# A2, 20150879 
+
+INSERT solution to question A0
+
+```{r}
+
+# This is how to insert code chunks
+
+x <- 1:5   # create x vector
+plot(x)    # plot it
+
+```
+
+# B3, 20150879
+The data file lights.dat contains data on the failure time of fluorescent strip lights in thousands of hours
+
+```{r}
+# 1. read the data
+t_fail<-scan("Data/lights.dat")
+# 2. summary of the data
+cat("The number of observations in the dataset is:",length(t_fail),"\n")
+cat("Mean of dataset is:",mean(t_fail),"\n")
+cat("Standard deviation of dataset is:", sd(t_fail) ,"\n")
+prop = sum(t_fail>=5)/length(t_fail) # numerator: count of case where t_fail is more than 5 (data is in thousands of hours). divisor: total of observations
+cat("proportion of lights surviving beyond 5,000 hours is: ", round(prop*100,2),"%\n", sep = "")
+
+
+#3. Produce a Quantile-Quantile plot with reference to a normal distribution. 
+qqnorm(t_fail)
+lines(t_fail, col = 2)
+
+#4. Produce a Quantile-Quantile plot with reference to a Weibull distribution with shape parameter 1.5 and scale parameter 5
+
+
+
+```
+
+INSERT answer to question B0, including any necessary code chunks and outputs.
+
+# C5, 20150879 
+AS context  ....
+The data file spe.dat contains data on per capita state and local public expenditures and associated state demographic and economic characteristics, in the USA, for 1960. It contains eight variables:
+
+    EXPEND: Per capita state and local public expenditures ($)
+    ECAB: Economic ability index, in which income, retail sales, and the value of output (manufactures, mineral, and agricultural) per capita are equally weighted.
+    MET: Percentage of population living in standard metropolitan areas
+    GROW: Percent change in population, 1950-1960
+    YOUNG: Percent of population aged 5-19 years
+    OLD: Percent of population over 65 years of age
+    WEST: Western state (1) or not (0)
+    STATE: Two letter abbreviation of the state 
+    
+    
+First, is always a good idea to start by haing an idea of teh data arround the goal searched for. the next chuck will load the data and plots scatters of each pairwise combination of variables, so it will be easy to identify in which paris of variable we should expect hich and low correlations.
+
+Analyzing the pair plot, it is no possible to find a clear perfect correlation between two varibles (the ideal perfet correlated pair-plot would look as diagonal straight line of points). Never the less visually, the most correlated variables problably are `ECAB~EXPEND` and `ECAB~GROW`. Conversely, the less correlated variable `OLD~MET` and `MET~EXPEND` as there is no correlation
+
+```{r}
+#Load Data
+ecoUSA<-read.table("Data/spe.dat", header = TRUE)
+pairs(ecoUSA[,1:6], main = "Fig 1. Pairs plot of state and local public expenditures per capita /n and state characteristics in the USA for 1960")
+```
+For this exerise we will analyze the realation between the varibles  
+    EXPEND: Per capita state and local public expenditures ($)
+    ECAB: Economic ability index, in which income, retail sales, and the value of output (manufactures, mineral, and agricultural) per capita are equally weighted.
+
+```{r}
+
+x= ecoUSA$EXPEND
+y= ecoUSA$ECAB
+
+# x= ecoUSA$OLD
+# y= ecoUSA$MET
+
+n= as.integer(length(x))
+txtlabs <- c("Test statistic","P value") # Labels for output
+```
+
+
+
+```{r}
+cat("-----------------------","\n")
+cat("Analisis of no association between variables using Pearson's coefficient of correlation (r)", "\n",  sep = "")
+cat("\n", "Two side-test for ")
+cat("H0: correlation coefficient ρ = 0","\n", sep = "")
+
+
+#Pearson's coefficient of correlation r
+r = sum((x-mean(x))*(y-mean(y)))/
+  (sum((x-mean(x))^2)*sum((y-mean(y))^2))^(1/2)
+
+cat("Pearson's correlation (r): ", r ,"\n", sep = "")
+
+# T statistic
+Tp = r*(n-2)^0.5/(1-r^2)^0.5
+### Eval "Tp" in t-student n-2 to get p value
+pval=2*pt(-abs(Tp),df=n-2)
+
+# print outputs
+cat(txtlabs[1]," : ", Tp ,"\n", sep = "")
+cat(txtlabs[2],"        : ", pval ,"\n", sep = "")
+
+```
+
+```{r}
+cat("-----------------------","\n")
+cat("Analisis of no association between variables using Fisher's z-transform", "\n", sep = "")
+cat("\n", "Approximate two-side-test for ", sep="")
+cat("H0: correlation coefficient ρ = 0","\n", sep = "")
+
+# Fischers Z transform statisitic
+Zfisher = 1/2 * log((1+r)/(1-r))
+Zmean = 1/2 * log((1+0)/(1-0))
+Zvar=1/(n-3)
+### Eval for H0 \ro=0 as N(Zmean,Zvar) / get p value 
+pval=2*pnorm(-abs(Zfisher),mean = Zmean, sd = sqrt(Zvar))
+
+# print outputs
+cat("Pearson's correlation (r): ", r ,"\n", sep = "")
+cat(txtlabs[1]," : ", Zfisher ,"\n", sep = "")
+cat(txtlabs[2],"        : ", pval ,"\n", sep = "")
+
+### create a CI for with  95% confidence interval for \ro
+
+cat("\n", "95% confidence interval for ρ = 0","\n", sep = "")
+alpha =0.05
+error <- qnorm(1-alpha/2)*sqrt(Zvar) # do we need to divide by sqr(n)??
+cat("[",0-error,",",0+error,"]", "\n")
+
+```
+
+```{r}
+
+cat("-----------------------","\n")
+cat("Analisis of no association between variables using Spearman's coefficient of rank correlation (rs)", "\n", sep = "")
+cat("\n", "Approximate two-side-test for ", sep="")
+cat("H0: X and Y are independent","\n", sep = "")
+
+#Spearman's coefficient of rank correlation rs
+xs= rank(x)
+ys= rank(y)
+
+rs = sum((xs-mean(xs))*(ys-mean(ys)))/
+  (sum((xs-mean(xs))^2)*sum((ys-mean(ys))^2))^(1/2)
+
+cat("Spearman's correlation (rs): ", rs ,"\n", sep = "")
+
+#Spearman statistic 
+Ts =  rs*(n-2)^0.5/(1-rs^2)^0.5
+### Eval "Ts" in t-student n-2 / get p value
+pval=2*pt(-abs(Ts),df=n-2)
+
+cat(txtlabs[1]," : ", Ts ,"\n", sep = "")
+cat(txtlabs[2],"        : ", pval ,"\n", sep = "")
+
+```

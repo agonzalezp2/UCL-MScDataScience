@@ -1,0 +1,26 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1605004169481.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "1216482315",
+    "id" : "3CB7FE9D",
+    "lastKnownWriteTime" : 1605540342,
+    "last_content_update" : 1606252750245,
+    "path" : "D:/OneDrive/Documents/1. Estudios/UCL - Data Science MSc/2. STAT0030 - Statistical Computing/Assesment 1/20150879_A2B3C5.Rmd",
+    "project_path" : "20150879_A2B3C5.Rmd",
+    "properties" : {
+        "cursorPosition" : "212,21",
+        "last_setup_crc32" : "",
+        "scrollLine" : "197"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 4,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

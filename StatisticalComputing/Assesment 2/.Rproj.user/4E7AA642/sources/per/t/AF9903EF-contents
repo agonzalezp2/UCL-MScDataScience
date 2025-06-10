@@ -1,0 +1,94 @@
+---
+title: "Final"
+author: "ag"
+date: "19/02/2021"
+output: word_document
+---
+
+#1. Introduction
+```{r, label="packages", include = FALSE, warning = FALSE}
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(lubridate)
+```
+
+Under a framework of Marketing Mix, sales are related the four P, that can be realted with factors given in the data: Price (PRICE_BASE, PRICE), Position(STORE_NUM, DATE),PRODUCT (UPC, BRAND) and Promotion (DISPLAY, FEATURE, TPR_ONLY). In this study we will consserder this relations.
+
+#2. Data exploration`
+```{r, include  = FALSE}
+dta<-as.tibble(read.csv("data/grocery.csv", header = TRUE))
+
+dta$STORE_NUM<-as.factor(dta$STORE_NUM)
+dta$UPC<-as.factor(dta$UPC)
+dta$MANUFACTURER<-as.factor(dta$MANUFACTURER)
+dta$DISPLAY<-as.factor(dta$DISPLAY)
+dta$FEATURE<-as.factor(dta$FEATURE)
+dta$TPR_ONLY<-as.factor(dta$TPR_ONLY)
+dta$UNITS<-as.double(dta$UNITS)
+dta$BASE_PRICE<-as.double(dta$BASE_PRICE)
+dta$PRICE<-as.double(dta$PRICE)
+```
+
+```{r, corr, echo = FALSE}
+pairs(dta[,c(10,1,2,3)],col=dta$MANUFACTURER, main="Pairwise Scatter Plots") # corr of quantitatives varibles
+```
+
+The varibles BASE_PRICE and PRICE, are higly correlateed ($\rho=0.85$). to solve this, it was created the varible DISCOUNT $(PRICE-BASE\_PRICE)/BASE\_PRICE$ ($\rho=-0.25$)
+
+```{r, solvingCorrelation, include = FALSE, echo = FALSE}
+cat("PRICE-BASE_price correlation is:", cor(dta$BASE_PRICE,dta$PRICE))
+dta$DISCOUNT<- -(dta$PRICE-dta$BASE_PRICE)/dta$BASE_PRICE
+cat("\n","DISCOUNT-BASE_price correlation is:", cor(dta$BASE_PRICE,dta$DISCOUNT))
+```
+ 
+
+The graph bellow shows the distribution of the prices of the products. We can see that the brand have clear markets position. "Private Label" is cheaper than the rest, but doesn't work with  discouts, moreover sometimes there are sales with prices avobe the base price. On the other hand, the other three manufacurer are more expensives and do work with discounts, with the expetion of TOMBSTONE. This is suggestig that the brand might have an iteraction effect with discount.
+
+```{r, Products, echo = FALSE}
+p1<-ggplot(data=dta, aes(x=UPC, y=PRICE)) + geom_boxplot(aes(colour=MANUFACTURER)) + theme(legend.position = "top") +coord_flip()
+p2<-ggplot(data=dta, aes(x=UPC, y=DISCOUNT)) + geom_boxplot(aes(colour=MANUFACTURER)) + theme(legend.position = "none") +coord_flip()+
+  theme(axis.title.y=element_blank(),axis.text.y=element_blank())
+p3<-ggplot(data=dta, aes(x=UPC, y=UNITS)) + geom_boxplot(aes(colour=MANUFACTURER))+ theme(legend.position = "none") +coord_flip() +
+  theme(axis.title.y=element_blank(),axis.text.y=element_blank())
+
+legend <- cowplot::get_legend(p1) # takes teh legend form plot1
+
+grid.arrange(p1+theme(legend.position = "none"), p2, p3, legend,
+              ncol=3, nrow = 2,
+             layout_matrix = rbind(c(1,2,3), c(4,4,4)),
+             widths = c(3.7, 2.5,2.5), heights = c(2.5,0.2),
+             top="Distribution of Prices and Sales by UPC"
+             )
+```
+Other graphs were run to get better insigth of the data, thaat are not ploted here for reason of space. For instance, the trend of the relationship between  Discount and Units sold, it seems that the slopes discount vs units seems to be related with the MANUFACURER, but en general more discounts measn more sales. It was aslo investigated the seasonality of the market, it could be seen some trends over the years. 
+```{r discount_Sales, message=FALSE, warning=FALSE, discount_Sales,  warning=FALSE, include=}
+
+ggplot(data=dta, aes(x=DISCOUNT, y=log(UNITS),group=UPC, colour=UPC)) +
+  geom_smooth(method = lm)+ 
+  ggtitle(" Discount vs Units")#+geom_point() 
+
+ggplot(data=dta, aes(x=PRICE, y=log(UNITS),group=UPC, colour=UPC)) +
+  geom_smooth(method = lm)+ 
+  ggtitle(" PRICE vs Units")#+geom_point() 
+
+```
+
+
+
+```{r a_brief_story_of_time, warning = FALSE, include = FALSE}
+dta_week<-dta
+dta_week$DATE<-as.Date(dta$WEEK_END_DATE,origin='1899-12-27')
+dta_week$week_n<-as.factor(week(dta_week$DATE))
+dta_week$year<-as.factor(year(dta_week$DATE))
+dta_week2<-dta_week%>%group_by(week_n,year)%>%summarise(sum_UNITS=sum(UNITS),avg_PRICE=sum(PRICE*UNITS)/sum(UNITS),avg_BASE_PRICE=sum(BASE_PRICE*UNITS)/sum(UNITS), avg_DISCOUNT=sum(DISCOUNT*UNITS)/sum(UNITS), Utility = sum(PRICE*UNITS))
+
+ggplot(data=dta_week2, aes(x=week_n, y=avg_PRICE,group=year, colour=year)) +
+  geom_line() + theme(axis.text.x = element_text(angle=90))+ 
+  ggtitle(" average sales per week of the year")
+
+```
+
+
+
+* 

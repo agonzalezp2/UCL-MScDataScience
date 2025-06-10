@@ -1,0 +1,6 @@
+"0","#Load Data"
+"0","ecoUSA<-read.table(""spe.dat"", header = TRUE)"
+"0",""
+"0","#plot pair of varibles "
+"0","pairs(ecoUSA[,1:6], main = ""Fig 1. Pairs plot of state and local public expenditures "
+"0","      per capita \n and state characteristics in the USA for 1960"")"

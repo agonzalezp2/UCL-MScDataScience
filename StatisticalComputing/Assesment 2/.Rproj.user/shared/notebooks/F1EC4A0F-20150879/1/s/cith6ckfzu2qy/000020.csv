@@ -1,0 +1,2 @@
+"0","par(mfrow=c(1,2))"
+"0","qq1<-qqPlot(log(dta$UNITS), distribution = ""pois"", lambda = mean((dta$UNITS)), main=""Poisson Q-Q Plot"", ylab = ""log(UNITS)"")"

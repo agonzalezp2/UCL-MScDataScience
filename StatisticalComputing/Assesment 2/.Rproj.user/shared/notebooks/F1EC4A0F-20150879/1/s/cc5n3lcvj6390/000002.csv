@@ -1,0 +1,7 @@
+"0","#and a new data set was created to input the categorical variables as Dummies, as the model required it."
+"0","dta_boos<- dummy_cols(dta,c(""UPC"",""MANUFACTURER"", ""STORE_GROUP"",""WEEK_YEAR""))"
+"0","dta_boos<- dta_boos%>%dplyr::select(-UPC,-STORE_NUM,-MANUFACTURER,-WEEK_YEAR,-UNITS,-STORE_GROUP,-WEEK_END_DATE)"
+"0","dta_boos$DISPLAY<-as.numeric(dta_boos$DISPLAY)"
+"0","dta_boos$FEATURE<-as.numeric(dta_boos$FEATURE)"
+"0","dta_boos$TPR_ONLY<-as.numeric(dta_boos$TPR_ONLY)"
+"0","#str(dta_boos)"
