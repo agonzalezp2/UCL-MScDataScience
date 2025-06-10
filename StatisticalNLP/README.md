@@ -1,1 +1,3 @@
-xxx
+# Abstract of results
+This study is centered on the exploration and understanding of which parts of a Natural Language processing model, namely the encoding method, the vector merging blocks and the classifier have a large impact on the accuracy
+of the NLI classification as well how the attributes of these blocks impact prediction accuracy. The Bidirectional Encoder Representations from Transformers (BERT) based model and multiple encoder-clasifier combinations that have been developed were trained and tested for performing Natural Language Inference (NLI) task on the MultiNLI corpus. After performing several experiments to understand the sensitivity of the model performance to changes on each of the blocks in the architecture, the evaluation led to an insightful discussion about the impact of encoders, merging blocks and classifier on the model’s accuracy.
